@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+
+# experiment outputs
+result_data/
+result_data_*/
+master_thesis_final/
+analysis_results/
+
+# raw NetData dumps + parser output (download separately, see README)
+data/big_data/
