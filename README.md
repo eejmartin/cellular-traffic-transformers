@@ -55,7 +55,7 @@ pip install -r requirements.txt
 
 `run.py` is the single entry point (train → test → predict → plots for every
 model × station). Hyperparameters live at the top of `run.py`
-(`SHARED_ARGS` / `MODEL_CONFIGS`, documented in `docs/MODELS.md`); the CLI
+(`SHARED_ARGS` / `MODEL_CONFIGS`, documented in `models/README.md`); the CLI
 selects the dataset, station cap, transfer strategy and seed:
 
 ```bash

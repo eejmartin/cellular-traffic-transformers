@@ -16,7 +16,7 @@ import matplotlib.pyplot as plt
 #
 # Every parameter in SHARED_ARGS is identical for all four models so results
 # are directly comparable between architectures. Per-model entries in
-# MODEL_CONFIGS contain only what is architecture-specific (see docs/MODELS.md
+# MODEL_CONFIGS contain only what is architecture-specific (see models/README.md
 # for an explanation of every parameter).
 # ---------------------------------------------------------------------------
 
@@ -190,7 +190,7 @@ def build_setting(model, args, file_name):
 
 def save_run_config(args, setting, results_dir):
     """Persist the full merged configuration so predict.py can rebuild the
-    exact model later (see docs/MODELS.md, 'Using trained models later')."""
+    exact model later (see models/README.md, 'Using trained models later')."""
     config_dir = os.path.join(results_dir, 'configs')
     os.makedirs(config_dir, exist_ok=True)
     config = dict(vars(args))

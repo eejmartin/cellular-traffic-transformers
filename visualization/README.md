@@ -9,8 +9,9 @@ per-station figures and the thesis docx build.
 
 Each script has a marked `CONFIG` block at the top (paths, run IDs, output
 folder) — edit it to point at new runs or a different output location. By
-default everything reads from and writes into `master_thesis/` (which is not
-tracked by git), so rerunning is safe.
+default everything reads from and writes into the author's local thesis
+working folder (`master_thesis/`, not part of this repository), so point the
+CONFIG paths at your own run folders when reusing.
 
 ## Scripts
 

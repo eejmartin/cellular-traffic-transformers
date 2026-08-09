@@ -9,12 +9,12 @@ run — with different datasets, more stations or new/renamed models.
 
 ```bash
 # single run
-python analysis/run_analysis.py result_data_20260705_131934
+python analysis/run_analysis.py master_thesis_final/result_data_bs_s2021_<ts>
 
 # compare two runs side by side (e.g. bs vs big_data), Macedonian labels
 python analysis/run_analysis.py \
-    master_thesis/result_data_20260705_131934 \
-    master_thesis/result_data_20260706_072702 \
+    master_thesis_final/result_data_bs_s2021_<ts> \
+    master_thesis_final/result_data_big_data_l100_s2021_<ts> \
     --names "Set 1 (bs)" "Set 2 (big_data)" --lang mk -o analysis_results
 ```
 
