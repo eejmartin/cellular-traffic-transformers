@@ -26,21 +26,18 @@ and cell sleeping) elaborated in the thesis.
 
 ## Datasets
 
-```
-data/
-├── big_bs/     30 stations   bs_<id>.csv   ~192 hourly rows
-├── medium_bs/  31 stations   time_hour, packets, bytes, users
-├── small_bs/   30 stations   (Set 1 — committed in this repo)
-└── big_data/   (Set 2 — NOT committed; public NetData dumps)
-```
+No data ships with the repository — see `data/README.md` for the expected
+layout. In short:
 
-- **Set 1** (91 stations, grouped by traffic volume) was provided by
-  FEIT/UKIM for research purposes and is redistributed here with permission.
+- **Set 1** (91 stations in three volume categories, hourly
+  `time_hour, packets, bytes, users` CSVs) was provided by FEIT/UKIM for
+  research purposes and is not redistributed; any per-station CSVs with the
+  same column layout drop into `data/{big_bs,medium_bs,small_bs}/`.
 - **Set 2**: download `Performance_{4G,5G}_{Weekday,Weekend}.txt` from the
   [Tsinghua FIB Lab NetData repository](https://github.com/tsinghua-fib-lab/NetData)
   into `data/big_data/`, then run `python parse_big_data.py` — it produces
   per-station 48-hour CSVs (`weekday + weekend`, 17,327 stations); the
-  experiments use the first 100.
+  thesis experiments use the first 100.
 
 ## Setup
 
@@ -91,5 +88,6 @@ finished campaign from saved checkpoints).
 
 ## License
 
-Code under the [MIT License](LICENSE). Set 1 data courtesy of FEIT/UKIM —
-please credit the source if you use it.
+Code under the [MIT License](LICENSE). The Set 1 measurements were
+provided by FEIT/UKIM for research purposes and are not part of this
+repository.

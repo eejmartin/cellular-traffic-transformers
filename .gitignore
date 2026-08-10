@@ -7,5 +7,8 @@ result_data_*/
 master_thesis_final/
 analysis_results/
 
-# raw NetData dumps + parser output (download separately, see README)
+# datasets are never committed (see data/README.md)
+data/big_bs/
+data/medium_bs/
+data/small_bs/
 data/big_data/
