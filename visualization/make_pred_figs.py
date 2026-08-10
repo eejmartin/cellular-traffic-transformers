@@ -9,9 +9,9 @@ import os, glob, shutil
 
 # --- CONFIG -----------------------------------------------------------
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MT = os.path.join(REPO, "master_thesis")        # runs live here
-OUT = os.path.join(MT, "src", "figures")        # output folder
-RUNS = {"bs": "result_data_20260705_131934", "big": "result_data_20260706_072702"}
+MT = os.path.join(REPO, "master_thesis_final")        # runs live here
+OUT = os.path.join(REPO, "master_thesis", "src", "figures")   # output folder
+RUNS = {"bs": "result_data_bs_s2021_20260809_072721", "big": "result_data_big_data_l100_s2021_20260809_084717"}
 # ----------------------------------------------------------------------
 os.makedirs(os.path.join(OUT, "orig"), exist_ok=True)
 

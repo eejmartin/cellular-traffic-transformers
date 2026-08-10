@@ -15,9 +15,10 @@ import os, sys
 # --- CONFIG -----------------------------------------------------------
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 MT = os.path.join(REPO, "master_thesis")        # thesis assets folder
+MTF = os.path.join(REPO, "master_thesis_final")  # v2 campaign runs
 OUT = os.path.join(MT, "src", "figures")        # output folder
 METRICS_CSV = os.path.join(MT, "metrics_all.csv")
-RUNS = {"bs": "result_data_20260705_131934", "big": "result_data_20260706_072702"}
+RUNS = {"bs": "result_data_bs_s2021_20260809_072721", "big": "result_data_big_data_l100_s2021_20260809_084717"}
 # ----------------------------------------------------------------------
 os.makedirs(OUT, exist_ok=True)
 sys.path.insert(0, os.path.join(REPO, "analysis"))
@@ -39,6 +40,14 @@ def style_ax(ax):
     ax.tick_params(colors=MUTED, labelsize=8.5)
 
 df = pd.read_csv(METRICS_CSV)
+# derive 'category': bs -> big/medium/small from the folder group; big -> 4G/5G
+def _cat(row):
+    g = str(row.get("group", ""))
+    if g.endswith("_bs"):
+        return g[:-3]
+    s = str(row["station"]) + " " + str(row["setting"])
+    return "4G" if "4G" in s else "5G"
+df["category"] = df.apply(_cat, axis=1)
 
 # ------------------------------------------------ A. daily cycles, one station
 d = pd.read_csv(f"{REPO}/data/big_bs/bs_6260.csv", parse_dates=["time_hour"])
@@ -171,7 +180,7 @@ plt.tight_layout(); plt.savefig(f"{OUT}/fig_rse_breakdown.png", dpi=170, bbox_in
 
 # ------------------------------------------------ H. parameter counts (via analysis/params.py)
 from params import count_params
-counts = count_params([os.path.join(MT, RUNS["bs"]), os.path.join(MT, RUNS["big"])],
+counts = count_params([os.path.join(MTF, RUNS["bs"]), os.path.join(MTF, RUNS["big"])],
                       run_names=["bs", "big"])
 if counts:
     from models_registry import label_for

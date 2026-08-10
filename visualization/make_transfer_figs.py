@@ -9,8 +9,8 @@ import os, sys
 
 # --- CONFIG -----------------------------------------------------------
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-MT = os.path.join(REPO, "master_thesis")        # runs live here
-FIGURES = os.path.join(MT, "src", "figures")    # output folder
+MT = os.path.join(REPO, "master_thesis_final")  # v2 campaign runs
+FIGURES = os.path.join(REPO, "master_thesis", "src", "figures")   # output folder
 # ----------------------------------------------------------------------
 sys.path.insert(0, os.path.join(REPO, "analysis"))
 
@@ -18,8 +18,8 @@ from compare_runs import compare
 
 PAIRS = {
     # figures subfolder -> (baseline run, transfer run)
-    "cmp_bs": ("result_data_20260705_131934", "result_data_20260706_112518"),
-    "cmp_big": ("result_data_20260706_072702", "result_data_20260706_130958"),
+    "cmp_bs": ("result_data_bs_s2021_20260809_072721", "result_data_bs_transfer-sequential_s2021_20260809_201853"),
+    "cmp_big": ("result_data_big_data_l100_s2021_20260809_084717", "result_data_big_data_l100_transfer-sequential_s2021_20260809_215939"),
 }
 
 for sub, (base, var) in PAIRS.items():
