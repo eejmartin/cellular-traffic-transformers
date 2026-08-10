@@ -1,0 +1,968 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Низ четирите архитектури — тензор по тензор</title>
+
+<style>
+:root{
+  --u: 1s;
+  --bg:#E9ECF0; --surface:#F6F8FA; --surface-2:#DFE4EA; --line:#C4CCD5; --line-soft:#D8DEE5;
+  --ink:#121A23; --ink-2:#45525E; --muted:#6C7A87;
+  --accent:#1B6E8A; --measured:#A9631C; --good:#2A7355; --risk:#A93A28;
+  --m1:#2C68BC; --m2:#A03F66; --m3:#1F7A5E; --m4:#87601D;
+  --model:var(--m1);
+  --sans:"Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --mono:ui-monospace,"Cascadia Mono","Cascadia Code",Consolas,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C131A; --surface:#141D26; --surface-2:#1C2833; --line:#2C3A47; --line-soft:#223039;
+    --ink:#E6EDF3; --ink-2:#AEBDC9; --muted:#7F91A0;
+    --accent:#4FB6CD; --measured:#DFA05C; --good:#5CC79A; --risk:#F07C6C;
+    --m1:#6FA9F0; --m2:#E68CAD; --m3:#5DC6A3; --m4:#D8AD64;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C131A; --surface:#141D26; --surface-2:#1C2833; --line:#2C3A47; --line-soft:#223039;
+  --ink:#E6EDF3; --ink-2:#AEBDC9; --muted:#7F91A0;
+  --accent:#4FB6CD; --measured:#DFA05C; --good:#5CC79A; --risk:#F07C6C;
+  --m1:#6FA9F0; --m2:#E68CAD; --m3:#5DC6A3; --m4:#D8AD64;
+}
+
+*,*::before,*::after{ box-sizing:border-box }
+html,body{ height:100% }
+body{ margin:0; background:var(--bg); color:var(--ink); font-family:var(--sans); font-size:16px; line-height:1.5; -webkit-font-smoothing:antialiased }
+:focus-visible{ outline:2px solid var(--model); outline-offset:2px; border-radius:3px }
+.app{ height:100dvh; display:grid; grid-template-rows:auto 1fr auto auto }
+
+/* заглавие */
+.bar{ display:flex; align-items:center; gap:1rem; flex-wrap:wrap; padding:.6rem clamp(.9rem,2.5vw,1.5rem);
+  background:var(--surface); border-bottom:1px solid var(--line) }
+.brand{ display:flex; align-items:baseline; gap:.6rem; min-width:0 }
+.brand b{ font-size:.98rem; letter-spacing:-.015em; white-space:nowrap }
+.brand a{ font-family:var(--mono); font-size:.68rem; color:var(--muted); text-decoration:none; border-bottom:1px dotted var(--line) }
+.brand a:hover{ color:var(--accent); border-color:var(--accent) }
+.tabs{ display:flex; gap:.3rem; margin-left:auto; flex-wrap:wrap }
+.tabs button{ font:inherit; font-family:var(--mono); font-size:.72rem; padding:.3rem .6rem; cursor:pointer;
+  background:transparent; color:var(--muted); border:1px solid transparent; border-bottom:2px solid var(--line-soft); border-radius:2px }
+.tabs button:hover{ background:var(--surface-2); color:var(--ink) }
+.tabs button[aria-current="true"]{ color:var(--c); border-bottom-color:var(--c); font-weight:700 }
+
+/* сцена */
+.stage{ display:grid; grid-template-columns:minmax(0,1.42fr) minmax(300px,.82fr); gap:1rem;
+  padding:clamp(.8rem,2vw,1.3rem) clamp(.9rem,2.5vw,1.5rem); overflow:hidden }
+@media (max-width:1000px){ .stage{ grid-template-columns:1fr; grid-template-rows:auto 1fr; overflow:auto } }
+
+.viz{ background:var(--surface); border:1px solid var(--line); border-radius:4px; padding:.7rem .8rem;
+  display:flex; flex-direction:column; min-width:0; overflow:auto }
+.viz svg{ display:block; width:100%; height:auto; margin:auto; min-width:520px }
+
+.panel{ display:flex; flex-direction:column; gap:.7rem; min-width:0; overflow:auto }
+.step-no{ font-family:var(--mono); font-size:.7rem; letter-spacing:.15em; text-transform:uppercase; color:var(--muted);
+  display:flex; align-items:center; gap:.55rem }
+.step-no::before{ content:""; width:1.4rem; height:2px; background:var(--model); flex:none }
+h2{ font-size:clamp(1.05rem,1.9vw,1.35rem); line-height:1.2; letter-spacing:-.02em; margin:0; text-wrap:balance }
+.shape{ font-family:var(--mono); font-size:.82rem; background:var(--surface); border:1px solid var(--line);
+  border-radius:3px; padding:.5rem .6rem; display:flex; flex-wrap:wrap; align-items:center; gap:.45rem; overflow-x:auto }
+.shape b{ color:var(--model); font-weight:600; white-space:nowrap }
+.shape span{ color:var(--muted) }
+.body{ font-size:.9rem; color:var(--ink-2); margin:0 }
+.body b{ color:var(--ink); font-weight:600 }
+.body + .body{ margin-top:-.2rem }
+.src{ font-family:var(--mono); font-size:.7rem; color:var(--muted); border-top:1px solid var(--line-soft); padding-top:.5rem; word-break:break-word }
+code{ font-family:var(--mono); font-size:.88em; background:var(--surface-2); padding:.05em .3em; border-radius:2px; color:var(--ink) }
+
+/* 'рбет' на моделот */
+.spine{ display:flex; gap:2px; padding:0 clamp(.9rem,2.5vw,1.5rem) .5rem; flex-wrap:wrap }
+.spine button{ flex:1 1 0; min-width:9px; height:16px; padding:0; cursor:pointer; border:none; border-radius:2px;
+  background:var(--surface-2); position:relative }
+.spine button:hover{ background:var(--line) }
+.spine button[aria-current="true"]{ background:var(--model) }
+.spine button.done{ background:color-mix(in srgb, var(--model) 42%, var(--surface-2)) }
+
+/* транспорт */
+.transport{ display:flex; align-items:center; gap:.8rem; flex-wrap:wrap; padding:.5rem clamp(.9rem,2.5vw,1.5rem);
+  background:var(--surface); border-top:1px solid var(--line) }
+.transport button{ font:inherit; cursor:pointer; background:var(--surface-2); color:var(--ink); border:1px solid var(--line);
+  border-radius:3px; padding:.28rem .6rem; min-width:2.1rem }
+.transport button:hover{ border-color:var(--model); color:var(--model) }
+#play{ min-width:2.6rem; font-weight:700 }
+.count{ font-family:var(--mono); font-size:.72rem; color:var(--muted); white-space:nowrap }
+.progress{ flex:1 1 140px; height:3px; background:var(--surface-2); border-radius:2px; overflow:hidden; min-width:80px }
+.progress i{ display:block; height:100%; width:0; background:var(--model) }
+.speeds{ display:flex; gap:.2rem }
+.speeds button{ font-family:var(--mono); font-size:.7rem; padding:.24rem .4rem; min-width:0 }
+.speeds button[aria-pressed="true"]{ border-color:var(--model); color:var(--model); font-weight:700 }
+
+/* SVG */
+svg text{ font-family:var(--mono); fill:var(--muted); font-size:10px }
+svg text.lbl{ fill:var(--ink-2); font-size:11px }
+svg text.big{ fill:var(--ink); font-size:12px; font-weight:600 }
+svg .axis{ stroke:var(--line); stroke-width:1 }
+
+/* влез на елементи */
+.fade{ opacity:0; animation:fin calc(.5*var(--u)) ease-out both; animation-delay:calc(var(--d,0)*.09*var(--u)) }
+@keyframes fin{ from{ opacity:0; transform:translateY(5px) } to{ opacity:1; transform:none } }
+.grow{ animation:gro calc(.55*var(--u)) cubic-bezier(.2,.9,.2,1) both; animation-delay:calc(var(--d,0)*.05*var(--u)) }
+@keyframes gro{ from{ opacity:0; transform:scale(.5) } to{ opacity:1; transform:none } }
+.pen{ animation:pen calc(1.5*var(--u)) ease-out both; animation-delay:calc(var(--d,0)*.09*var(--u)) }
+@keyframes pen{ from{ stroke-dashoffset:var(--len,300) } to{ stroke-dashoffset:0 } }
+.beat{ animation:beat calc(1.7*var(--u)) ease-in-out infinite; animation-delay:calc(var(--d,0)*.09*var(--u)) }
+@keyframes beat{ 0%,100%{ opacity:.3 } 50%{ opacity:1 } }
+.slide{ animation:sli calc(4*var(--u)) cubic-bezier(.45,0,.55,1) infinite }
+@keyframes sli{ 0%{ transform:translateX(0) } 85%,100%{ transform:translateX(var(--tx,80px)) } }
+
+@media (prefers-reduced-motion: reduce){
+  .fade,.grow,.pen{ animation-duration:1ms !important; animation-delay:0ms !important }
+  .beat,.slide{ animation:none; opacity:1 }
+}
+</style>
+
+<div class="app">
+  <header class="bar">
+    <div class="brand">
+      <b>Низ четирите архитектури — тензор по тензор</b>
+      <a href="index.html">← преглед на пајплајнот</a>
+    </div>
+    <nav class="tabs" id="tabs" aria-label="Модели"></nav>
+  </header>
+
+  <main class="stage">
+    <div class="viz"><svg id="viz" viewBox="0 0 900 330" role="img" aria-labelledby="vizTitle"><title id="vizTitle"></title><g id="vizg"></g></svg></div>
+    <section class="panel">
+      <p class="step-no" id="stepNo"></p>
+      <h2 id="stepTitle"></h2>
+      <div class="shape" id="stepShape"></div>
+      <div id="stepBody"></div>
+      <p class="src" id="stepSrc"></p>
+    </section>
+  </main>
+
+  <nav class="spine" id="spine" aria-label="Чекори"></nav>
+
+  <footer class="transport">
+    <button id="prevM" title="Претходен модел (Shift+←)">‹‹</button>
+    <button id="prev" title="Претходен чекор (←)">‹</button>
+    <button id="play" title="Пушти / паузирај (Space)">▶</button>
+    <button id="next" title="Следен чекор (→)">›</button>
+    <button id="nextM" title="Следен модел (Shift+→)">››</button>
+    <span class="count" id="count"></span>
+    <span class="progress"><i id="bar"></i></span>
+    <span class="speeds" role="group" aria-label="Брзина">
+      <button data-s="0.6" aria-pressed="false">0.6×</button>
+      <button data-s="1" aria-pressed="true">1×</button>
+      <button data-s="1.6" aria-pressed="false">1.6×</button>
+    </span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+const NS="http://www.w3.org/2000/svg";
+const el=(n,a={})=>{const e=document.createElementNS(NS,n);for(const k in a)e.setAttribute(k,a[k]);return e;};
+const add=(p,n,a)=>{const e=el(n,a);p.appendChild(e);return e;};
+const txt=(p,x,y,s,cls,extra={})=>{const t=add(p,"text",Object.assign({x,y},extra));if(cls)t.setAttribute("class",cls);t.textContent=s;return t;};
+const fmt=d=>"["+d.join(", ")+"]";
+
+/* ── тензор како картичка: предната плоча е последните две оски,
+      водечките оски се прикажани како наслагани копии ───────────── */
+function tensor(g,{x,y,w,h,dims,color="var(--model)",d=0,dim2=null}){
+  const grp=add(g,"g",{class:"fade",style:"--d:"+d});
+  const n=dims.length;
+  const rows=n>1?dims[n-2]:1, cols=dims[n-1];
+  const R=Math.min(rows,10), C=Math.min(cols,22);
+  const cw=Math.min((w-2)/C,(h-2)/R,18), ch=cw;
+  const gw=C*cw, gh=R*ch;
+  const ox=x+(w-gw)/2, oy=y+(h-gh)/2;
+  /* наслагани копии за водечките оски */
+  if(n>2){ for(let s=2;s>=1;s--) add(grp,"rect",{x:ox-s*5,y:oy-s*5,width:gw,height:gh,rx:2,
+    fill:"var(--surface-2)",stroke:color,opacity:.35}); }
+  add(grp,"rect",{x:ox,y:oy,width:gw,height:gh,rx:2,fill:color,opacity:.1,stroke:color});
+  for(let r=0;r<R;r++)for(let c=0;c<C;c++)
+    add(grp,"rect",{x:ox+c*cw+.7,y:oy+r*ch+.7,width:cw-1.4,height:ch-1.4,rx:1,fill:color,
+      opacity:.16+((r*7+c*3)%5)*.1});
+  if(cols>C) txt(grp,ox+gw+5,oy+gh/2+4,"…",null);
+  if(rows>R) txt(grp,ox+gw/2-3,oy+gh+13,"⋮",null);
+  txt(grp,x+w/2,y-8,fmt(dims),"big",{"text-anchor":"middle",style:"fill:"+color});
+  if(n>1) txt(grp,ox-8,oy+gh/2+4,String(rows),null,{"text-anchor":"end"});
+  txt(grp,ox+gw/2,oy+gh+(rows>R?26:15),String(cols),null,{"text-anchor":"middle"});
+  if(dim2) txt(grp,x+w/2,y+h+28,dim2,null,{"text-anchor":"middle"});
+  return grp;
+}
+function opBox(g,{x,y,w=210,h=54,lines,color="var(--model)",d=0}){
+  const grp=add(g,"g",{class:"fade",style:"--d:"+d});
+  add(grp,"rect",{x,y,width:w,height:h,rx:3,fill:"var(--surface-2)",stroke:color,"stroke-width":1.4});
+  lines.forEach((l,i)=>txt(grp,x+w/2,y+(lines.length===1?h/2+4:20+i*15),l,i?null:"big",
+    {"text-anchor":"middle",style:i?"":"fill:"+color}));
+  return grp;
+}
+function arrow(g,x1,y,x2,d=0,color="var(--line)"){
+  const grp=add(g,"g",{class:"fade",style:"--d:"+d});
+  add(grp,"path",{d:`M${x1} ${y} H${x2-6}`,stroke:color,"stroke-width":1.5,fill:"none"});
+  add(grp,"path",{d:`M${x2-10} ${y-4} l5 4 l-5 4`,stroke:color,"stroke-width":1.5,fill:"none"});
+  return grp;
+}
+/* стандарден чекор: тензор → операција → тензор */
+const flow=(inD,opLines,outD,capIn,capOut)=>g=>{
+  tensor(g,{x:34,y:78,w:250,h:150,dims:inD,d:0,dim2:capIn});
+  opBox(g,{x:340,y:126,w:220,h:56,lines:opLines,d:3});
+  arrow(g,292,154,336,2); arrow(g,566,154,610,5);
+  tensor(g,{x:616,y:78,w:250,h:150,dims:outD,d:6,dim2:capOut});
+};
+
+/* ── помошни цртежи ───────────────────────────────────────────── */
+function heat(g,x,y,size,n,d=0,color="var(--model)",diag=false){
+  const grp=add(g,"g",{class:"fade",style:"--d:"+d});
+  const c=size/n;
+  for(let r=0;r<n;r++)for(let q=0;q<n;q++){
+    const v=diag?Math.exp(-Math.abs(r-q)/2.2):(((r*13+q*29)%17)/17)*.8+.1;
+    add(grp,"rect",{x:x+q*c,y:y+r*c,width:c-.5,height:c-.5,fill:color,opacity:.08+v*.75});
+  }
+  add(grp,"rect",{x,y,width:size,height:size,fill:"none",stroke:color,opacity:.6});
+  return grp;
+}
+function bars(g,x,y,w,h,vals,d=0,color="var(--model)",hi=[]){
+  const grp=add(g,"g",{class:"fade",style:"--d:"+d});
+  const m=Math.max(...vals), bw=w/vals.length;
+  vals.forEach((v,i)=>add(grp,"rect",{x:x+i*bw,y:y+h-(v/m)*h,width:Math.max(1.5,bw-2),height:(v/m)*h,
+    fill:hi.includes(i)?"var(--measured)":color,opacity:hi.includes(i)?1:.42,class:"grow",style:"--d:"+(d+i*.5)}));
+  add(grp,"line",{x1:x,y1:y+h,x2:x+w,y2:y+h,class:"axis"});
+  return grp;
+}
+function wave(n,seed=5,base=44,amp=26){
+  let s=seed,o=[];const rnd=()=>(s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff;
+  for(let i=0;i<n;i++){const hh=i%24;o.push(Math.max(4,base+amp*(Math.sin((hh-8)/24*6.283)*.62+Math.sin((hh-4)/12*6.283)*.2)+(rnd()-.5)*amp*.3));}
+  return o;
+}
+const line=(pts)=>pts.map((p,i)=>(i?"L":"M")+p[0].toFixed(1)+" "+p[1].toFixed(1)).join(" ");
+
+/* ═══════════════ PatchTST ═══════════════ */
+const PATCH=[
+{t:"Влезен batch",sh:[["batch_x","[6, 24, 3]"]],dur:7,
+ b:["Од <code>DataLoader</code> доаѓаат <b>6 прозорци</b> одеднаш (<code>batch_size = 6</code>). Секој прозорец е <b>24 последователни часа</b> со <b>3 канали</b>: <code>packets</code>, <code>bytes</code>, <code>users</code>.",
+    "Каналот <code>users</code> е секогаш последен — целта."],
+ s:"exp/exp_main.py · train()",
+ draw:g=>{
+   tensor(g,{x:60,y:70,w:280,h:170,dims:[6,24,3],d:0,dim2:"batch × часови × канали"});
+   const ws=wave(24,7);
+   const pts=ws.map((v,i)=>[440+i*16,220-(v/70)*110]);
+   add(g,"path",{d:line(pts),fill:"none",stroke:"var(--model)","stroke-width":1.8,
+     class:"pen",style:"--len:600;--d:4","stroke-dasharray":600});
+   add(g,"line",{x1:436,y1:222,x2:840,y2:222,class:"axis"});
+   txt(g,440,60,"еден прозорец, каналот users","lbl");
+   txt(g,440,240,"час 0",null); txt(g,824,240,"час 23",null);
+ }},
+{t:"Каналите одат напред",sh:[["permute(0,2,1)","[6, 24, 3] → [6, 3, 24]"]],dur:6,
+ b:["Сите операции подолу работат <b>по канал</b>, па временската оска мора да биде последна."],
+ s:"models/PatchTST.py · Model.forward",
+ draw:flow([6,24,3],["permute(0, 2, 1)","времето оди последно"],[6,3,24],"часови × канали","канали × часови")},
+{t:"RevIN — нормализација по прозорец",sh:[["RevIN(norm)","[6, 3, 24] → [6, 3, 24]"]],dur:8,
+ b:["Секој прозорец и секој канал се нормализираат <b>сами за себе</b>: се одзема средината и се дели со стандардната девијација на тие 24 часа.",
+    "Затоа <code>scale = False</code> во <code>run.py</code> е безбедно — станица со 500 корисници и станица со 20 влегуваат во моделот во иста скала, а излезот се враќа во сурови единици на крајот.",
+    "<code>affine = 0</code>: нема учени параметри во нормализацијата."],
+ s:"layers/RevIN.py · PatchTST_backbone.forward",
+ draw:g=>{
+   const raw=wave(24,3,52,30), mu=raw.reduce((a,b)=>a+b)/24;
+   const sd=Math.sqrt(raw.reduce((a,b)=>a+(b-mu)**2,0)/24);
+   const p1=raw.map((v,i)=>[70+i*13,180-(v/90)*95]);
+   const p2=raw.map((v,i)=>[560+i*13,145-((v-mu)/sd)*26]);
+   txt(g,70,54,"сурово","lbl"); txt(g,560,54,"нормализирано","lbl");
+   add(g,"path",{d:line(p1),fill:"none",stroke:"var(--muted)","stroke-width":1.7,class:"pen",style:"--len:500;--d:0","stroke-dasharray":500});
+   add(g,"line",{x1:66,y1:182,x2:392,y2:182,class:"axis"});
+   add(g,"line",{x1:66,y1:180-(mu/90)*95,x2:392,y2:180-(mu/90)*95,stroke:"var(--measured)","stroke-dasharray":"4 3","stroke-width":1.2,class:"fade",style:"--d:3"});
+   txt(g,396,184-(mu/90)*95,"μ",null,{style:"fill:var(--measured)"});
+   opBox(g,{x:410,y:118,w:130,h:54,lines:["(x − μ) / σ","по прозорец"],d:5});
+   add(g,"path",{d:line(p2),fill:"none",stroke:"var(--model)","stroke-width":1.7,class:"pen",style:"--len:500;--d:6","stroke-dasharray":500});
+   add(g,"line",{x1:556,y1:145,x2:882,y2:145,stroke:"var(--measured)","stroke-dasharray":"4 3","stroke-width":1.2,class:"fade",style:"--d:8"});
+   txt(g,886,148,"0",null,{style:"fill:var(--measured)"});
+   txt(g,70,236,"истата форма, но центрирана на нула и со единечна дисперзија","lbl");
+   txt(g,70,258,"μ и σ се памтат за да се врати предвидувањето во број на корисници",null);
+ }},
+{t:"Дополнување на крајот",sh:[["ReplicationPad1d((0, 1))","[6, 3, 24] → [6, 3, 25]"]],dur:6,
+ b:["Последната вредност се повторува еднаш. Без тоа, последниот час би влегол во помалку закрпи од другите и крајот на прозорецот — токму делот најблизок до она што се предвидува — би бил потценет."],
+ s:"PatchTST_backbone · padding_patch = 'end'",
+ draw:flow([6,3,24],["ReplicationPad1d((0, 1))","се повторува последниот час"],[6,3,25],"24 часа","25 — последниот е удвоен")},
+{t:"Закрпување — 20 преклопувачки прозорчиња",sh:[["unfold(-1, 6, 1)","[6, 3, 25] → [6, 3, 20, 6]"]],dur:9,
+ b:["Со <code>patch_len = 6</code> и <code>stride = 1</code> низата се сече на <b>20 закрпи од по 6 часа</b>, секоја поместена за еден час.",
+    "Ова е клучната идеја на PatchTST: токен не е <b>еден час</b>, туку <b>шест</b>. Вниманието работи со 20 токени наместо 24, а секој токен веќе носи локален облик — раст, пад, врв."],
+ s:"PatchTST_backbone.forward",
+ draw:g=>{
+   const x0=60,bw=30;
+   txt(g,x0,52,"25 часа по дополнувањето","lbl");
+   for(let i=0;i<25;i++) add(g,"rect",{x:x0+i*bw,y:62,width:bw-3,height:22,rx:2,
+     fill:"var(--model)",opacity:i===24?.22:.4,class:"grow",style:"--d:"+(i*.35)});
+   const br=add(g,"g",{class:"slide",style:"--tx:"+(19*bw)+"px"});
+   add(br,"rect",{x:x0-2,y:58,width:bw*6,height:30,rx:2,fill:"none",stroke:"var(--measured)","stroke-width":2});
+   txt(br,x0+bw*3,104,"6 часа",null,{"text-anchor":"middle",style:"fill:var(--measured)"});
+   txt(g,x0,140,"20 закрпи","lbl");
+   for(let i=0;i<20;i++){
+     const cx=x0+(i%10)*76, cy=150+Math.floor(i/10)*46;
+     const gg=add(g,"g",{class:"grow",style:"--d:"+(6+i*.7)});
+     for(let k=0;k<6;k++) add(gg,"rect",{x:cx+k*11,y:cy,width:9,height:20,rx:1,fill:"var(--model)",opacity:.2+((i+k)%4)*.16});
+     txt(gg,cx+33,cy+32,"#"+(i+1),null,{"text-anchor":"middle"});
+   }
+   txt(g,60,268,"20 = (24 − 6)/1 + 1 + 1 (дополнувањето додава уште една)",null);
+ }},
+{t:"Секоја закрпа станува вектор",sh:[["W_P: Linear(6 → 32)","[6, 3, 20, 6] → [6, 3, 20, 32]"]],dur:7,
+ b:["Еден <b>ист</b> линеарен слој ги пресликува сите закрпи од 6 броја во 32-димензионален вектор — вградување на закрпата.",
+    "<code>d_model = 32</code> е избран со мрежно пребарување на валидација; намерно е мал бидејќи по станица има само ~110 примероци за тренирање."],
+ s:"TSTiEncoder · self.W_P",
+ draw:g=>{
+   tensor(g,{x:34,y:78,w:230,h:150,dims:[6,3,20,6],d:0,dim2:"20 закрпи × 6 часа"});
+   const o=add(g,"g",{class:"fade",style:"--d:3"});
+   add(o,"rect",{x:330,y:110,width:230,height:86,rx:3,fill:"var(--surface-2)",stroke:"var(--model)","stroke-width":1.4});
+   txt(o,445,132,"W_P: Linear(6 → 32)","big",{"text-anchor":"middle",style:"fill:var(--model)"});
+   for(let i=0;i<6;i++)for(let j=0;j<16;j++)
+     add(o,"rect",{x:352+j*13,y:146+i*7,width:11,height:5,rx:1,fill:"var(--model)",opacity:.15+((i*5+j*3)%5)*.13});
+   txt(o,445,206,"иста матрица за сите 20 закрпи и сите 3 канали",null,{"text-anchor":"middle"});
+   arrow(g,272,154,326,2); arrow(g,566,154,610,5);
+   tensor(g,{x:616,y:78,w:250,h:150,dims:[6,3,20,32],d:6,dim2:"20 токени × 32"});
+ }},
+{t:"Канална независност",sh:[["reshape","[6, 3, 20, 32] → [18, 20, 32]"]],dur:8,
+ b:["Каналите се <b>превиткуваат во batch-оската</b>: 6 прозорци × 3 канали = <b>18 независни низи</b>.",
+    "Вниманието никогаш не гледа преку канали. <code>packets</code> не влијае врз <code>users</code> внатре во енкодерот — трите канали делат <b>тежини</b>, но не и контекст.",
+    "Ова е второто име на PatchTST: <i>channel-independent</i>."],
+ s:"TSTiEncoder.forward · torch.reshape",
+ draw:g=>{
+   const names=["packets","bytes","users"],cols=["var(--muted)","var(--muted)","var(--measured)"];
+   txt(g,60,52,"6 прозорци × 3 канали","lbl");
+   for(let b=0;b<6;b++)for(let c=0;c<3;c++)
+     add(g,"rect",{x:60+b*40,y:64+c*26,width:34,height:21,rx:2,fill:cols[c],opacity:.45,class:"grow",style:"--d:"+((b*3+c)*.4)});
+   names.forEach((n,i)=>txt(g,306,80+i*26,n,null,{style:"fill:"+cols[i]}));
+   arrow(g,392,110,440,7);
+   txt(g,470,52,"18 независни редови во batch","lbl");
+   for(let i=0;i<18;i++)
+     add(g,"rect",{x:470+(i%9)*44,y:64+Math.floor(i/9)*26,width:38,height:21,rx:2,
+       fill:cols[i%3],opacity:.45,class:"grow",style:"--d:"+(8+i*.35)});
+   txt(g,60,160,"внатре во енкодерот секој ред се обработува одделно","lbl");
+   for(let i=0;i<3;i++){
+     const gx=60+i*280;
+     add(g,"rect",{x:gx,y:176,width:250,height:66,rx:3,fill:"var(--surface-2)",stroke:cols[i],class:"fade",style:"--d:"+(14+i)});
+     txt(g,gx+125,200,names[i],"big",{"text-anchor":"middle",style:"fill:"+cols[i]});
+     txt(g,gx+125,220,"20 токени → внимание → 20 токени",null,{"text-anchor":"middle"});
+   }
+   txt(g,60,268,"истите тежини, три одвоени контексти",null);
+ }},
+{t:"Позициска кодировка",sh:[["u = dropout(x + W_pos)","+ [20, 32]"]],dur:6,
+ b:["Вниманието само по себе не знае редослед. Се додава <b>учена</b> матрица <code>[20, 32]</code> — по еден вектор за секоја од 20-те позиции.",
+    "<code>pe = 'zeros', learn_pe = True</code>: почнува од нула и се учи заедно со сè друго."],
+ s:"TSTiEncoder · positional_encoding",
+ draw:g=>{
+   tensor(g,{x:34,y:80,w:220,h:140,dims:[18,20,32],d:0,dim2:"токени"});
+   txt(g,398,74,"+","big",{"text-anchor":"middle",style:"font-size:26px;fill:var(--model)"});
+   tensor(g,{x:300,y:80,w:200,h:140,dims:[20,32],color:"var(--measured)",d:3,dim2:"W_pos — учена"});
+   arrow(g,516,150,560,5);
+   tensor(g,{x:566,y:80,w:220,h:140,dims:[18,20,32],d:6,dim2:"позицијата е внатре"});
+ }},
+{t:"Енкодер × 3 — внимание меѓу закрпите",sh:[["MHA(4 глави) + FFN","[18, 20, 32] → [18, 20, 32]"]],dur:11,
+ b:["Секој од трите слоја: <b>внимание со 4 глави</b> (<code>d_k = d_v = 8</code>), потоа BatchNorm, потоа FFN <code>32 → 256 → 32</code> со GELU.",
+    "Матрицата на вниманието е <b>20 × 20</b> — секоја закрпа гледа во сите други, вклучително и во себе. Со 4 глави тоа се 4 такви матрици по слој.",
+    "<code>res_attention = True</code>: скоровите од претходниот слој се <b>додаваат</b> на следниот, па длабочината не ја брише раната структура."],
+ s:"TSTEncoder · TSTEncoderLayer",
+ draw:g=>{
+   txt(g,60,50,"внимание: 20 × 20, по глава","lbl");
+   for(let h=0;h<4;h++){
+     heat(g,60+h*84,60,72,20,h*1.2,"var(--model)",true);
+     txt(g,96+h*84,148,"глава "+(h+1),null,{"text-anchor":"middle"});
+   }
+   arrow(g,400,100,444,5);
+   opBox(g,{x:450,y:62,w:190,h:76,lines:["concat → Linear","32 → 32"],d:6});
+   arrow(g,646,100,690,7);
+   opBox(g,{x:696,y:62,w:170,h:76,lines:["BatchNorm","+ резидуал"],d:8});
+   const y=180;
+   opBox(g,{x:60,y,w:180,h:60,lines:["FFN 32 → 256","GELU"],d:10});
+   arrow(g,246,y+30,290,11);
+   opBox(g,{x:296,y,w:180,h:60,lines:["Linear 256 → 32","+ резидуал"],d:12});
+   arrow(g,482,y+30,526,13);
+   opBox(g,{x:532,y,w:200,h:60,lines:["× 3 слоја","скоровите се пренесуваат"],color:"var(--measured)",d:14});
+   txt(g,60,264,"излезот има иста форма како влезот — само побогата репрезентација",null);
+ }},
+{t:"Главата спојува сè во една бројка",sh:[["Flatten → Linear(640 → 1)","[6, 3, 32, 20] → [6, 3, 1]"]],dur:8,
+ b:["20 токени × 32 димензии = <b>640 броја</b> по канал. Тие се израмнуваат и еден линеарен слој ги пресликува во <b>една</b> вредност — предвидувањето за следниот час.",
+    "<code>individual = 0</code>: една заедничка глава за сите канали."],
+ s:"Flatten_Head · nf = d_model × patch_num",
+ draw:g=>{
+   tensor(g,{x:34,y:78,w:220,h:150,dims:[6,3,32,20],d:0,dim2:"32 × 20 по канал"});
+   arrow(g,266,154,306,2);
+   opBox(g,{x:312,y:126,w:150,h:56,lines:["Flatten","→ 640"],d:3});
+   arrow(g,468,154,508,4);
+   opBox(g,{x:514,y:126,w:170,h:56,lines:["Linear(640 → 1)","една глава"],d:5});
+   arrow(g,690,154,730,6);
+   const o=add(g,"g",{class:"grow",style:"--d:7"});
+   add(o,"circle",{cx:768,cy:154,r:11,fill:"var(--measured)"});
+   txt(o,768,190,"[6, 3, 1]","big",{"text-anchor":"middle",style:"fill:var(--measured)"});
+   txt(g,60,262,"640 = 20 закрпи × 32 димензии",null);
+ }},
+{t:"Назад во број на корисници",sh:[["RevIN(denorm) → срез","[6, 3, 1] → [6, 1, 1]"]],dur:8,
+ b:["Средината и девијацијата запаметени во чекор 3 се враќаат — излезот повторно е <b>број на корисници</b>.",
+    "Потоа <code>exp_main</code> зема <code>outputs[:, -1:, -1:]</code>: последниот чекор од хоризонтот, само каналот <code>users</code>. Предвидувањата за <code>packets</code> и <code>bytes</code> постојат, но <b>никогаш не влегуваат во загубата</b>.",
+    "MSE се пресметува токму врз овој тензор."],
+ s:"exp/exp_main.py · f_dim = −1 бидејќи features = 'MS'",
+ draw:g=>{
+   tensor(g,{x:34,y:78,w:200,h:140,dims:[6,3,1],d:0,dim2:"3 канали"});
+   arrow(g,246,148,290,2);
+   opBox(g,{x:296,y:120,w:160,h:56,lines:["× σ + μ","RevIN denorm"],d:3});
+   arrow(g,462,148,506,4);
+   const s=add(g,"g",{class:"fade",style:"--d:5"});
+   ["packets","bytes","users"].forEach((n,i)=>{
+     const on=i===2;
+     add(s,"rect",{x:520,y:112+i*26,width:120,height:21,rx:2,fill:on?"var(--measured)":"var(--muted)",opacity:on?.85:.25});
+     txt(s,580,127+i*26,n,null,{"text-anchor":"middle",style:on?"fill:var(--bg)":""});
+     if(!on) add(s,"path",{d:`M528 ${115+i*26} l104 15 M632 ${115+i*26} l-104 15`,stroke:"var(--risk)","stroke-width":1,opacity:.5});
+   });
+   arrow(g,650,148,694,7);
+   const o=add(g,"g",{class:"grow",style:"--d:8"});
+   add(o,"circle",{cx:730,cy:148,r:12,fill:"var(--measured)"});
+   txt(o,760,144,"[6, 1, 1]","big",{style:"fill:var(--measured)"});
+   txt(o,760,162,"6 прогнози",null);
+   txt(g,60,254,"loss = MSE(outputs, batch_y) — само овој канал, само овој чекор","lbl");
+   txt(g,60,278,"по една прогноза за секој од шесте прозорци во batch-от",null);
+ }}];
+
+/* ═══════════════ CATS ═══════════════ */
+const CATS=[
+{t:"Истиот влез, иста нормализација",sh:[["x → permute → норм.","[6, 24, 3] → [6, 3, 24]"]],dur:7,
+ b:["CATS почнува исто како PatchTST: истите прозорци, истата пренаредба, инстанца-нормализација по време.",
+    "Разликата почнува од моментот кога минатото е спакувано."],
+ s:"models/CATS.py · Model_backbone.forward",
+ draw:flow([6,24,3],["permute + (x − μ)/σ","по прозорец и канал"],[6,3,24],"суров прозорец","нормализиран")},
+{t:"Истите 20 закрпи",sh:[["pad + unfold(-1, 6, 1)","[6, 3, 24] → [6, 3, 20, 6]"]],dur:6,
+ b:["<code>patch_len = 6</code>, <code>stride = 1</code>, дополнување на крајот — идентично на PatchTST, за да биде споредбата чесна.",
+    "Но кај CATS овие закрпи <b>никогаш нема да бидат прашалници</b>."],
+ s:"Model_backbone · unfold",
+ draw:flow([6,3,24],["ReplicationPad + unfold","patch_len 6, stride 1"],[6,3,20,6],"24 часа","20 закрпи од 6")},
+{t:"Минатото станува клучеви и вредности",sh:[["W_P + PE → reshape","[6, 3, 20, 6] → [18, 20, 32]"]],dur:8,
+ b:["Закрпите се вградуваат со <code>Linear(6 → 32)</code>, им се додава позициска кодировка <code>[20, 32]</code>, и каналите се превиткуваат во batch — исто како PatchTST.",
+    "Овој тензор ќе служи <b>само</b> како извор: од него се земаат K и V. Тој никогаш не се менува во текот на трите слоја."],
+ s:"Dummy_Embedding.forward · seq_patch",
+ draw:g=>{
+   tensor(g,{x:34,y:78,w:230,h:150,dims:[6,3,20,6],d:0,dim2:"закрпи"});
+   arrow(g,272,154,316,2);
+   opBox(g,{x:322,y:110,w:200,h:44,lines:["W_P: Linear(6 → 32)"],d:3});
+   opBox(g,{x:322,y:162,w:200,h:44,lines:["+ PE [20, 32]"],color:"var(--measured)",d:4});
+   arrow(g,528,154,572,5);
+   tensor(g,{x:578,y:78,w:230,h:150,dims:[18,20,32],d:6,dim2:"K и V — замрзнати"});
+   txt(g,60,278,"замрзнати во смисла дека слоевите не ги ажурираат, а не дека не се учат",null);
+ }},
+{t:"Иднината е параметар, не податок",sh:[["nn.Parameter(1, 6) → W_P","[1, 6] → [18, 1, 32]"]],dur:11,
+ b:["Ова е срцето на CATS. Нема токен што ја претставува иднината, па моделот <b>си создава свој</b>: тензор со тежини што се учат заедно со сè друго.",
+    "<code>pred_patch_num = ceil(pred_len / patch_len) = ceil(1/6) = 1</code> — една идна закрпа. Таа поминува низ <b>истиот</b> <code>W_P</code> како минатите закрпи, па живее во истиот простор.",
+    "<code>query_independence = True</code>: <b>еден</b> прашалник, споделен меѓу трите канали, повторен 18 пати."],
+ s:"Dummy_Embedding · self.dummies",
+ draw:g=>{
+   const d=add(g,"g",{class:"fade",style:"--d:0"});
+   add(d,"rect",{x:60,y:96,width:190,height:60,rx:3,fill:"var(--model)",opacity:.28,stroke:"var(--model)","stroke-width":2});
+   txt(d,155,120,"nn.Parameter","big",{"text-anchor":"middle",style:"fill:var(--model)"});
+   txt(d,155,138,"[1, 6] — 6 учени броја",null,{"text-anchor":"middle"});
+   txt(d,60,84,"не доаѓа од податоците","lbl",{style:"fill:var(--model)"});
+   arrow(g,258,126,302,3);
+   opBox(g,{x:308,y:98,w:180,h:56,lines:["ист W_P","Linear(6 → 32)"],d:4});
+   arrow(g,494,126,538,5);
+   tensor(g,{x:544,y:70,w:150,h:110,dims:[1,32],d:6,dim2:"еден прашалник"});
+   arrow(g,700,126,744,7);
+   tensor(g,{x:750,y:70,w:130,h:110,dims:[18,1,32],d:8,dim2:"повторен 18×"});
+   const gr=add(g,"g",{class:"fade",style:"--d:10"});
+   add(gr,"path",{d:"M60 214 H840",stroke:"var(--line)","stroke-dasharray":"3 3"});
+   txt(gr,60,236,"градиентот тече и во овој параметар — прашалникот учи што да прашува","lbl",{style:"fill:var(--measured)"});
+   txt(gr,60,258,"по тренирањето тој е фиксен и ист за секој прозорец на таа станица",null);
+ }},
+{t:"Вкрстено внимание — слој 1",sh:[["cross_attn(Q, K, V)","Q [18, 1, 32] · K,V [18, 20, 32]"]],dur:11,
+ b:["Прашалникот се споредува со сите 20 минати закрпи. Матрицата на скорови е <b>[18, 4, 1, 20]</b> — една редица по глава, не квадрат.",
+    "Тоа е целата разлика во цената: PatchTST пресметува 20 × 20 скорови по глава, CATS пресметува 1 × 20.",
+    "<code>softmax</code> по последната оска дава тежини што збирно се 1 — колку секоја минати закрпа придонесува за одговорот."],
+ s:"_MultiheadAttention · einsum('bphd,bshd→bphs')",
+ draw:g=>{
+   const q=add(g,"g",{class:"fade",style:"--d:0"});
+   add(q,"rect",{x:60,y:120,width:64,height:34,rx:3,fill:"var(--model)",opacity:.4,stroke:"var(--model)","stroke-width":1.8});
+   txt(q,92,142,"Q","big",{"text-anchor":"middle",style:"fill:var(--model)"});
+   txt(q,60,110,"1 прашалник","lbl");
+   txt(g,196,64,"K, V — 20 закрпи","lbl");
+   const ws=[.03,.04,.03,.05,.06,.04,.07,.12,.09,.06,.04,.03,.05,.04,.03,.04,.05,.06,.04,.03];
+   ws.forEach((w,i)=>{
+     const x=196+i*32;
+     add(g,"rect",{x,y:74,width:26,height:28,rx:2,fill:"var(--model)",opacity:.25,class:"grow",style:"--d:"+(2+i*.3)});
+     add(g,"path",{d:`M130 137 Q ${(130+x+13)/2} ${110} ${x+13} 106`,fill:"none",stroke:"var(--model)",
+       "stroke-width":.5+w*22,opacity:.25+w*4,class:"pen",style:"--len:260;--d:"+(6+i*.3),"stroke-dasharray":260});
+     add(g,"rect",{x,y:168,width:26,height:(w/.12)*46,rx:1,fill:"var(--measured)",opacity:.8,class:"grow",style:"--d:"+(10+i*.3)});
+   });
+   txt(g,196,162,"softmax тежини (збир = 1)","lbl",{style:"fill:var(--measured)"});
+   add(g,"line",{x1:192,y1:168,x2:840,y2:168,class:"axis"});
+   txt(g,60,240,"дебелината на линијата е тежината — моделот сам решава кои часови се важни",null);
+   txt(g,60,262,"scores [18, 4, 1, 20] · излез [18, 1, 32]",null);
+ }},
+{t:"QAM и GEGLU",sh:[["QAM(0.1 → 0.3) + FFN","[18, 1, 32] → [18, 1, 32]"]],dur:9,
+ b:["<b>Query-Adaptive Masking</b>: при тренирање, прашалниците се исклучуваат случајно со веројатност што расте линеарно од 0.1 до 0.3 преку хоризонтот — подалечните прогнози се учат под потешки услови. При евалуација е <b>исклучено</b>.",
+    "<b>GEGLU</b>: <code>Linear(32 → 256)</code>, резултатот се дели на два дела од по 128, едниот минува низ GELU и ги <i>придушува</i> другиот. Потоа <code>Linear(128 → 32)</code>."],
+ s:"QueryAdaptiveMasking · GEGLU",
+ draw:g=>{
+   opBox(g,{x:40,y:120,w:150,h:56,lines:["QAM","само training"],color:"var(--risk)",d:0});
+   arrow(g,196,148,240,2);
+   opBox(g,{x:246,y:120,w:150,h:56,lines:["Linear 32 → 256"],d:3});
+   const sp=add(g,"g",{class:"fade",style:"--d:5"});
+   add(sp,"rect",{x:430,y:96,width:120,height:40,rx:3,fill:"var(--model)",opacity:.3,stroke:"var(--model)"});
+   txt(sp,490,120,"x  [128]",null,{"text-anchor":"middle"});
+   add(sp,"rect",{x:430,y:160,width:120,height:40,rx:3,fill:"var(--measured)",opacity:.3,stroke:"var(--measured)"});
+   txt(sp,490,184,"gate  [128]",null,{"text-anchor":"middle"});
+   add(sp,"path",{d:"M402 148 L426 116 M402 148 L426 180",stroke:"var(--line)","stroke-width":1.4,fill:"none"});
+   txt(sp,490,86,"chunk(2)","lbl",{"text-anchor":"middle"});
+   arrow(g,556,148,600,7);
+   opBox(g,{x:606,y:120,w:150,h:56,lines:["x · GELU(gate)","GEGLU"],d:8});
+   const dn=add(g,"g",{class:"fade",style:"--d:9"});
+   add(dn,"path",{d:"M681 178 V208 M677 204 l4 5 l4 -5",fill:"none",stroke:"var(--line)","stroke-width":1.5});
+   opBox(g,{x:586,y:212,w:190,h:50,lines:["Linear 128 → 32"],d:10});
+   txt(g,40,246,"QAM повторно се применува",null);
+   txt(g,40,266,"и по FFN, пред LayerNorm",null);
+ }},
+{t:"Слоеви 2 и 3 — резидуални скорови",sh:[["prev + scores","3 × DecoderLayer"]],dur:9,
+ b:["Секој нареден слој ги <b>додава</b> скоровите од претходниот пред <code>softmax</code>: <code>attn_scores = attn_scores + prev</code>.",
+    "Резултатот е дека раниот, поедноставен поглед врз минатото не се губи кога длабочината почне да преработува. Ова е <code>res_attention = True</code>.",
+    "Минатото <code>seq</code> поминува непроменето низ сите три слоја — само <code>pred</code> се ажурира."],
+ s:"Decoder.forward · mod(seq, pred, prev=scores)",
+ draw:g=>{
+   for(let l=0;l<3;l++){
+     const x=60+l*280;
+     add(g,"rect",{x,y:70,width:250,height:120,rx:3,fill:"var(--surface-2)",stroke:"var(--model)",
+       class:"fade",style:"--d:"+(l*3)});
+     txt(g,x+125,94,"слој "+(l+1),"big",{"text-anchor":"middle",style:"fill:var(--model)"});
+     txt(g,x+125,116,"cross-attn(pred, seq, seq)",null,{"text-anchor":"middle"});
+     txt(g,x+125,134,"QAM · LayerNorm",null,{"text-anchor":"middle"});
+     txt(g,x+125,152,"GEGLU FFN",null,{"text-anchor":"middle"});
+     txt(g,x+125,172,"QAM · LayerNorm",null,{"text-anchor":"middle"});
+     if(l<2){
+       add(g,"path",{d:`M${x+250} 116 H${x+276}`,stroke:"var(--model)","stroke-width":1.5,class:"fade",style:"--d:"+(l*3+2)});
+       add(g,"path",{d:`M${x+250} 214 H${x+276} M${x+276} 214 V 132`,fill:"none",stroke:"var(--measured)",
+         "stroke-width":1.4,"stroke-dasharray":"4 3",class:"fade",style:"--d:"+(l*3+2)});
+     }
+   }
+   add(g,"path",{d:"M60 214 H310",stroke:"var(--measured)","stroke-width":1.4,"stroke-dasharray":"4 3",class:"fade",style:"--d:8"});
+   txt(g,60,236,"скоровите од претходниот слој се додаваат — res_attention","lbl",{style:"fill:var(--measured)"});
+   txt(g,60,262,"seq (минатото) е ист влез во сите три слоја; се менува само pred",null);
+ }},
+{t:"Проекција назад во часови",sh:[["Linear(32 → 6) → flatten","[6, 3, 1, 32] → [6, 3, 6]"]],dur:8,
+ b:["Прашалникот е вектор од 32 броја; тој се проектира назад во <b>закрпа од 6 часа</b>.",
+    "Моделот значи предвидува 6 часа наеднаш, но бидејќи <code>pred_len = 1</code>, се задржува <b>само првиот</b>. Останатите 5 се пресметани и фрлени — цена на тоа што архитектурата работи со закрпи."],
+ s:"Projection · Model.forward → x[:, :pred_len, :]",
+ draw:g=>{
+   tensor(g,{x:34,y:80,w:180,h:130,dims:[6,3,1,32],d:0,dim2:"прашалник"});
+   arrow(g,226,145,270,2);
+   opBox(g,{x:276,y:117,w:170,h:56,lines:["Linear(32 → 6)"],d:3});
+   arrow(g,452,145,496,4);
+   const h=add(g,"g",{class:"fade",style:"--d:5"});
+   for(let i=0;i<6;i++){
+     const on=i===0;
+     add(h,"rect",{x:510+i*46,y:120,width:40,height:50,rx:2,fill:on?"var(--measured)":"var(--muted)",opacity:on?.9:.22,
+       class:"grow",style:"--d:"+(6+i*.6)});
+     txt(h,530+i*46,150,"+"+(i+1),null,{"text-anchor":"middle",style:on?"fill:var(--bg)":""});
+   }
+   txt(h,510,110,"6 предвидени часа","lbl");
+   txt(h,510,190,"се задржува само првиот",null,{style:"fill:var(--measured)"});
+   txt(g,60,246,"денормализација со μ и σ од чекор 1, потоа permute → [6, 1, 3]",null);
+   txt(g,60,268,"exp_main зема каналот users → [6, 1, 1]",null);
+ }}];
+
+/* ═══════════════ DeformableTST ═══════════════ */
+const DEF=[
+{t:"RevIN, потоа секој канал сам за себе",sh:[["reshape + unsqueeze","[6, 24, 3] → [18, 1, 24]"]],dur:8,
+ b:["По RevIN, тензорот се превиткува во <b>18 еднодимензионални серии</b> (6 прозорци × 3 канали), секоја со еден „канал“ како слика со една боја.",
+    "Оттука натаму сè се одвива со конволуции и внимание врз должина 24 — <b>без закрпи</b>."],
+ s:"DeformableTST.forward · reshape(B*M, L).unsqueeze(1)",
+ draw:flow([6,24,3],["permute → reshape → unsqueeze","18 серии од 24 чекори"],[18,1,24],"batch × часови × канали","серии × 1 × часови")},
+{t:"Stem — еден чекор останува еден чекор",sh:[["Conv1d(1 → 32, k=1)","[18, 1, 24] → [18, 32, 24]"]],dur:9,
+ b:["Со <code>stem_ratio = 1</code> stem-от е конволуција со <b>кернел 1</b>: не спојува соседни часови и <b>не ја намалува резолуцијата</b>. Само ја крева ширината од 1 на 32 канали.",
+    "Оригиналната 4-фазна хиерархија ја преполовува должината меѓу фази — 24 чекори би паднале на 3. Затоа авторите за кратки влезови сами препорачуваат <b>една фаза</b>, што е конфигурацијата во <code>run.py</code>."],
+ s:"DeformableTST · stem (stem_ratio == 1)",
+ draw:g=>{
+   tensor(g,{x:34,y:80,w:200,h:140,dims:[18,1,24],d:0,dim2:"1 канал"});
+   arrow(g,246,150,290,2);
+   opBox(g,{x:296,y:122,w:190,h:56,lines:["Conv1d(1 → 32, k=1)","+ LayerNorm"],d:3});
+   arrow(g,492,150,536,4);
+   tensor(g,{x:542,y:80,w:200,h:140,dims:[18,32,24],d:5,dim2:"32 канали, сè уште 24 чекори"});
+   const w=add(g,"g",{class:"fade",style:"--d:8"});
+   add(w,"rect",{x:60,y:248,width:780,height:34,rx:3,fill:"var(--risk)",opacity:.1,stroke:"var(--risk)"});
+   txt(w,74,270,"со 4 фази: 24 → 12 → 6 → 3 чекори. Премногу малку за час-по-час предвидување.",null,{style:"fill:var(--risk)"});
+ }},
+{t:"LPU — локален поглед пред глобалниот",sh:[["depthwise Conv1d(k=3)","[18, 32, 24] → [18, 32, 24]"]],dur:7,
+ b:["Пред секој блок оди <b>Local Perception Unit</b>: depthwise конволуција со кернел 3 (<code>groups = 32</code>, значи по еден филтер за секој канал), плус резидуал.",
+    "Вниманието е добро за далечни врски, но лошо за „што се случи претходниот час“. LPU го покрива тоа евтино."],
+ s:"Stage.forward · local_perception_units",
+ draw:g=>{
+   const x0=90,sp=30;
+   txt(g,x0,58,"24 чекори","lbl");
+   for(let i=0;i<24;i++) add(g,"circle",{cx:x0+i*sp,cy:96,r:6,fill:"var(--model)",opacity:.35,class:"grow",style:"--d:"+(i*.3)});
+   const k=add(g,"g",{class:"slide",style:"--tx:"+(21*sp)+"px"});
+   add(k,"rect",{x:x0-16,y:78,width:sp*2+32,height:36,rx:3,fill:"none",stroke:"var(--measured)","stroke-width":2});
+   txt(k,x0+sp,132,"k = 3",null,{"text-anchor":"middle",style:"fill:var(--measured)"});
+   for(let i=0;i<24;i++) add(g,"circle",{cx:x0+i*sp,cy:178,r:6,fill:"var(--model)",opacity:.7,class:"grow",style:"--d:"+(8+i*.3)});
+   txt(g,x0,160,"по LPU + резидуал","lbl");
+   txt(g,90,236,"groups = 32: секој од 32-та канали има свој филтер од 3 тежини — 96 параметри вкупно",null);
+   txt(g,90,258,"нема мешање меѓу каналите тука; тоа го прави MLP-от подоцна",null);
+ }},
+{t:"Под-мрежа што предвидува КАДЕ да се гледа",sh:[["conv_offset","[36, 16, 24] → [36, 1, 24]"]],dur:12,
+ b:["Ова е механизмот по кој архитектурата го носи името. Каналите се делат на <b>2 групи</b> (<code>n_groups = 2</code>) по 16, и за секоја позиција мала мрежа предвидува <b>едно поместување</b>:",
+    "<code>DWConv(k=3) → GELU → LayerNorm → Conv1d(16 → 1)</code>.",
+    "Излезот <b>не е тежина</b> — тоа е <b>координата</b>. Моделот не учи колку да гледа во соседот, туку <b>кој</b> сосед воопшто да го погледне."],
+ s:"layers/Global_Attn.py · DAttentionBaseline.conv_offset",
+ draw:g=>{
+   tensor(g,{x:34,y:74,w:190,h:130,dims:[36,16,24],d:0,dim2:"q по групи"});
+   const c=add(g,"g",{class:"fade",style:"--d:3"});
+   ["DWConv k=3","GELU","LayerNorm","Conv1d(16 → 1)"].forEach((s,i)=>{
+     add(c,"rect",{x:256,y:70+i*36,width:190,height:29,rx:3,fill:"var(--surface-2)",stroke:"var(--model)"});
+     txt(c,351,89+i*36,s,null,{"text-anchor":"middle"});
+   });
+   arrow(g,232,139,252,2);
+   arrow(g,452,139,496,8);
+   tensor(g,{x:502,y:74,w:160,h:130,dims:[36,1,24],color:"var(--measured)",d:9,dim2:"поместувања"});
+   const n=add(g,"g",{class:"fade",style:"--d:11"});
+   txt(n,690,120,"по едно","lbl",{style:"fill:var(--measured)"});
+   txt(n,690,138,"поместување",null,{style:"fill:var(--measured)"});
+   txt(n,690,154,"за секоја позиција",null);
+   txt(g,60,248,"offset_range_factor = −1: поместувањата не се ограничени, само се сечат во [−1, 1]",null);
+   txt(g,60,270,"no_off = 0: механизмот е вклучен (со 1 би се свел на обично внимание)",null);
+ }},
+{t:"grid_sample — читање меѓу мострите",sh:[["pos = reference + offset","F.grid_sample → [18, 32, 24]"]],dur:12,
+ b:["Поместувањата се додаваат на <b>референтна решетка</b> од рамномерни позиции. Резултатот речиси никогаш не паѓа точно на цел час.",
+    "<code>F.grid_sample</code> чита на <b>дробна</b> позиција со линеарна интерполација — на пример „часот 7.4“ е мешавина од час 7 и час 8. Затоа целата работа останува диференцијабилна: градиентот тече назад и до <code>conv_offset</code>.",
+    "Од овие семплирани точки се пресметуваат K и V — не од оригиналните позиции."],
+ s:"DAttentionBaseline.forward · F.grid_sample",
+ draw:g=>{
+   const x0=70,sp=33,yr=196,yss=104;
+   const offs=[0,.42,-.28,.66,-.55,.18,.94,-.75,.33,-.18,.55,-.42,.78,.12,-.63,.27,.48,-.33,.85,-.09,.36,-.51,.21,.6];
+   txt(g,x0,72,"семплирани позиции (дробни)","lbl",{style:"fill:var(--measured)"});
+   txt(g,x0,232,"референтна решетка (цели часови)","lbl");
+   for(let i=0;i<24;i++){
+     const xr=x0+i*sp, xs=xr+offs[i]*26;
+     add(g,"circle",{cx:xr,cy:yr,r:3.5,fill:"none",stroke:"var(--muted)","stroke-width":1.2,class:"grow",style:"--d:"+(i*.25)});
+     const gg=add(g,"g",{class:"fade",style:"--d:"+(4+i*.3)});
+     add(gg,"path",{d:`M${xr} ${yr-6} C ${xr} ${yr-40}, ${xs} ${yss+40}, ${xs} ${yss+7}`,fill:"none",
+       stroke:"var(--measured)","stroke-width":1,opacity:.6});
+     add(gg,"circle",{cx:xs,cy:yss,r:4.4,fill:"var(--measured)",opacity:.9});
+   }
+   add(g,"line",{x1:x0-10,y1:yr,x2:x0+24*sp,y2:yr,class:"axis"});
+   txt(g,x0,264,"истата решетка се користи и за релативната позициска пристрасност, исто преку grid_sample",null);
+ }},
+{t:"Вниманието работи врз семплираните точки",sh:[["attn [72, 24, 24]","4 глави × hc = 8"]],dur:9,
+ b:["Прашалниците се сите 24 позиции, но клучевите и вредностите доаѓаат од <b>научените</b> позиции.",
+    "Со 4 глави и <code>hc = 8</code>, тензорот на скорови е <b>[18 × 4, 24, 24]</b>. На него се додава <b>научена релативна позициска пристрасност</b> — моделот знае колку далеку е семплираната точка од прашалникот.",
+    "Потоа <code>proj_out</code>, <code>DropPath(0.3)</code> и резидуал."],
+ s:"DAttentionBaseline · attn + rpb",
+ draw:g=>{
+   txt(g,60,54,"скорови по глава: 24 × 24","lbl");
+   for(let h=0;h<4;h++){ heat(g,60+h*92,64,80,24,h*1.2,"var(--model)",true);
+     txt(g,100+h*92,160,"глава "+(h+1),null,{"text-anchor":"middle"}); }
+   arrow(g,434,104,478,7);
+   opBox(g,{x:484,y:76,w:180,h:56,lines:["proj_out","Linear 32 → 32"],d:8});
+   arrow(g,670,104,690,9);
+   opBox(g,{x:696,y:76,w:180,h:56,lines:["DropPath 0.3","+ резидуал"],color:"var(--measured)",d:10});
+   txt(g,60,196,"+ релативна позициска пристрасност","lbl",{style:"fill:var(--measured)"});
+   heat(g,60,206,64,24,6,"var(--measured)",true);
+   txt(g,140,224,"научена, исто се чита преку grid_sample",null);
+   txt(g,140,248,"drop_path: цел блок се прескокнува случајно при тренирање",null);
+ }},
+{t:"DWC-MLP и трите блока",sh:[["Conv1d(32→256) → DW k=3 → Conv1d(256→32)","× 3"]],dur:9,
+ b:["MLP-от во DeformableTST не е чисто point-wise: помеѓу двете 1×1 конволуции стои <b>depthwise конволуција со кернел 3</b>, па и тука има локален контекст.",
+    "<code>expansion = 8</code> → внатрешна ширина 32 × 8 = <b>256</b>, што е истото <code>d_ff</code> како кај другите модели.",
+    "Целата секвенца LPU → деформабилно внимание → DWC-MLP се повторува <b>3 пати</b> (<code>depths = [3]</code>)."],
+ s:"layers/Transformer_Module.py · TransformerMLPWithConv",
+ draw:g=>{
+   const st=["Conv1d 32 → 256","DWConv k=3, groups=256","GELU","Conv1d 256 → 32"];
+   st.forEach((s,i)=>{ const x=44+i*216;
+     add(g,"rect",{x,y:96,width:196,height:52,rx:3,fill:"var(--surface-2)",stroke:"var(--model)",class:"fade",style:"--d:"+(i*2)});
+     txt(g,x+98,127,s,null,{"text-anchor":"middle"});
+     if(i<3) arrow(g,x+198,122,x+216,i*2+1);
+   });
+   const b=add(g,"g",{class:"fade",style:"--d:9"});
+   add(b,"rect",{x:44,y:176,width:812,height:44,rx:3,fill:"var(--measured)",opacity:.1,stroke:"var(--measured)"});
+   txt(b,450,196,"× 3 блока","big",{"text-anchor":"middle",style:"fill:var(--measured)"});
+   txt(b,450,212,"LPU → деформабилно внимание → DWC-MLP, секој со свој резидуал",null,{"text-anchor":"middle"});
+   txt(g,44,254,"drop_path_rate расте линеарно преку блоковите: torch.linspace(0, 0.3, 3)",null);
+ }},
+{t:"Главата и враќањето",sh:[["Flatten(768) → Linear → denorm","[18, 32, 24] → [6, 1, 1]"]],dur:8,
+ b:["<code>LayerNorm</code>, потоа тензорот се разложува назад на <code>[6, 3, 32, 24]</code>. 32 × 24 = <b>768</b> броја по канал се израмнуваат и еден линеарен слој дава една вредност.",
+    "RevIN денормализира, и повторно се зема само <code>users</code>, само последниот чекор."],
+ s:"layers/head.py · Flatten_Head · nf = N × dims",
+ draw:g=>{
+   tensor(g,{x:34,y:80,w:200,h:140,dims:[6,3,32,24],d:0,dim2:"по разложување"});
+   arrow(g,246,150,290,2);
+   opBox(g,{x:296,y:122,w:150,h:56,lines:["Flatten","→ 768"],d:3});
+   arrow(g,452,150,496,4);
+   opBox(g,{x:502,y:122,w:170,h:56,lines:["Linear(768 → 1)"],d:5});
+   arrow(g,678,150,722,6);
+   const o=add(g,"g",{class:"grow",style:"--d:7"});
+   add(o,"circle",{cx:760,cy:150,r:12,fill:"var(--measured)"});
+   txt(o,760,190,"[6, 1, 1]","big",{"text-anchor":"middle",style:"fill:var(--measured)"});
+   txt(g,60,250,"768 = 24 чекори × 32 канали — ништо не е намалено по пат",null);
+ }}];
+
+/* ═══════════════ Peri-midFormer ═══════════════ */
+const PERI=[
+{t:"Влез со временски марки",sh:[["x_enc [6, 24, 3]","x_mark [6, 24, 4]"]],dur:8,
+ b:["Единствениот од четирите што добива <b>втор тензор</b>: часот, денот, денот во неделата и месецот за секој од 24-те чекори.",
+    "Останатите три модели ја гледаат само бројката; овој знае дека часот е 03:00 во сабота."],
+ s:"exp_main._model_forward · PerimidFormer добива batch_x_mark",
+ draw:g=>{
+   tensor(g,{x:60,y:80,w:250,h:140,dims:[6,24,3],d:0,dim2:"вредности"});
+   tensor(g,{x:400,y:80,w:250,h:140,dims:[6,24,4],color:"var(--measured)",d:3,dim2:"месец · ден · ден-во-недела · час"});
+   const n=add(g,"g",{class:"fade",style:"--d:6"});
+   add(n,"rect",{x:690,y:104,width:180,height:92,rx:3,fill:"var(--surface-2)",stroke:"var(--model)"});
+   txt(n,780,132,"embed = timeF","big",{"text-anchor":"middle",style:"fill:var(--model)"});
+   txt(n,780,152,"freq = 'h'",null,{"text-anchor":"middle"});
+   txt(n,780,174,"TemporalEmbedding",null,{"text-anchor":"middle"});
+   txt(g,60,258,"марките се пресметуваат во data_loader.py од колоната time_hour",null);
+ }},
+{t:"Non-stationary нормализација",sh:[["x − μ, / σ","по прозорец, оска на времето"]],dur:6,
+ b:["Иста идеја како RevIN, но напишана директно во моделот: средината и девијацијата по време се одземаат сега и се враќаат на самиот крај."],
+ s:"Model.forecast · means / stdev",
+ draw:flow([6,24,3],["(x − μ) / σ","μ, σ по прозорец"],[6,24,3],"суров","центриран")},
+{t:"Разложување на тренд и сезонски дел",sh:[["series_decomp(25)","→ trend + seasonal"]],dur:10,
+ b:["Подвижна средина со прозорец <b>25</b> го дава трендот; сезонскиот дел е остатокот <code>x − trend</code>.",
+    "Двата дела оттука патуваат по <b>сосема различни патишта</b>: трендот низ еден линеарен слој, сезонскиот низ целата пирамида.",
+    "Тоа е разумно — бавното движење не бара внимание, а дневниот циклус бара."],
+ s:"utils/tools.py · series_decomp(moving_avg = 25)",
+ draw:g=>{
+   const w=wave(24,17,50,28);
+   const tr=w.map((_,i)=>{let s=0,c=0;for(let k=Math.max(0,i-6);k<Math.min(24,i+7);k++){s+=w[k];c++}return s/c;});
+   const P=(a,yt,hh)=>a.map((v,i)=>[70+i*13,yt+hh-(v/85)*hh]);
+   txt(g,70,52,"x (нормализиран)","lbl");
+   add(g,"path",{d:line(P(w,58,52)),fill:"none",stroke:"var(--ink-2)","stroke-width":1.6,class:"pen",style:"--len:500;--d:0","stroke-dasharray":500});
+   add(g,"path",{d:"M400 96 l22 -18 M400 96 l22 18",stroke:"var(--line)","stroke-width":1.4,fill:"none",class:"fade",style:"--d:3"});
+   txt(g,470,52,"trend — подвижна средина(25)","lbl",{style:"fill:var(--measured)"});
+   add(g,"path",{d:line(P(tr,58,52).map(p=>[p[0]+400,p[1]])),fill:"none",stroke:"var(--measured)","stroke-width":1.8,class:"pen",style:"--len:500;--d:4","stroke-dasharray":500});
+   txt(g,470,168,"seasonal = x − trend","lbl",{style:"fill:var(--model)"});
+   add(g,"path",{d:line(w.map((v,i)=>[470+i*13,206-(v-tr[i])*1.6])),fill:"none",stroke:"var(--model)","stroke-width":1.6,class:"pen",style:"--len:500;--d:6","stroke-dasharray":500});
+   add(g,"line",{x1:466,y1:206,x2:790,y2:206,class:"axis"});
+   txt(g,70,250,"трендот оди во Linear(24 → 2) и се додава дури на самиот крај","lbl",{style:"fill:var(--measured)"});
+   txt(g,70,272,"сезонскиот дел ја гради пирамидата",null,{style:"fill:var(--model)"});
+ }},
+{t:"FFT ги наоѓа периодите",sh:[["torch.fft.rfft(x, dim=1)","[6, 24, 3] → [6, 13, 3]"]],dur:12,
+ b:["Реалниот FFT врз временската оска дава 13 фреквенции. Се зема апсолутната вредност, се просечи преку batch и преку канали → вектор од 13 амплитуди.",
+    "<code>frequency_list[0] = 0</code> ја отфрла нултата фреквенција (константата), потоа <code>topk(2)</code> ги зема двете најсилни. Кодот <b>присилува</b> првото ниво да биде самата серија (индекс 1).",
+    "<b>Периодот</b> е <code>24 // индекс</code>. За индекси [1, 3] тоа се периоди <b>[24, 8]</b>."],
+ s:"models/PerimidFormer.py · FFT_for_Period",
+ draw:g=>{
+   const amp=[0,7,14,58,11,9,38,6,10,5,8,4,6];
+   txt(g,60,52,"|rfft| — просек преку batch и канали","lbl");
+   bars(g,60,60,420,110,amp.map(v=>Math.max(v,1)),0,"var(--model)",[3,6]);
+   txt(g,60,190,"индекс 0 се нулира (константата)",null);
+   const t=add(g,"g",{class:"fade",style:"--d:9"});
+   add(t,"path",{d:"M180 56 V46 H262 V56",fill:"none",stroke:"var(--measured)","stroke-width":1.2});
+   txt(t,530,86,"topk(2) → индекси [1, 3]","big",{style:"fill:var(--measured)"});
+   txt(t,530,110,"период = 24 // индекс",null);
+   txt(t,530,132,"→ [24, 8]","big",{style:"fill:var(--measured)"});
+   txt(t,530,160,"top_k = 2 бидејќи 24 мостри",null);
+   txt(t,530,176,"разрешуваат само неколку периоди",null);
+   txt(g,60,230,"периодите се податочно зависни — различна станица може да даде друга пирамида","lbl");
+   txt(g,60,254,"затоа овој чекор е единствениот што ја менува формата од прозорец до прозорец",null);
+ }},
+{t:"Пирамидата се склопува",sh:[["components_per_level [1, 3]","→ peri_mid [6, 4, 32, 3]"]],dur:12,
+ b:["Ниво 1: период 24 → <b>1 компонента</b> од 24 часа (самата серија). Ниво 2: период 8 → <b>3 компоненти</b> од по 8 часа.",
+    "Секоја компонента се дополнува со нули до должина 24 и минува низ <code>Linear(24 → 32)</code>. Сите 4 се редат во еден тензор.",
+    "Формата <code>[6, 4, 32, 3]</code> е: batch × <b>вкупно компоненти</b> × d_model × канали."],
+ s:"Peri_mid_const.forward",
+ draw:g=>{
+   txt(g,60,50,"ниво 1 — период 24","lbl",{style:"fill:var(--m4)"});
+   add(g,"rect",{x:60,y:60,width:432,height:34,rx:2,fill:"var(--model)",opacity:.32,stroke:"var(--model)",class:"grow",style:"--d:0"});
+   txt(g,276,82,"24 часа",null,{"text-anchor":"middle"});
+   txt(g,60,124,"ниво 2 — период 8","lbl",{style:"fill:var(--m4)"});
+   for(let i=0;i<3;i++){
+     add(g,"rect",{x:60+i*146,y:134,width:140,height:34,rx:2,fill:"var(--model)",opacity:.5,stroke:"var(--model)",class:"grow",style:"--d:"+(2+i)});
+     txt(g,130+i*146,156,"8 ч",null,{"text-anchor":"middle"});
+     add(g,"path",{d:`M${130+i*146} 130 V98`,stroke:"var(--m4)","stroke-width":1,"stroke-dasharray":"3 3",class:"fade",style:"--d:"+(5+i)});
+   }
+   arrow(g,510,110,554,7);
+   opBox(g,{x:560,y:60,w:180,h:50,lines:["pad до 24","→ Linear(24 → 32)"],d:8});
+   tensor(g,{x:560,y:150,w:180,h:110,dims:[6,4,32,3],d:10,dim2:"4 компоненти"});
+   txt(g,60,196,"1 + 3 = 4 компоненти вкупно","lbl");
+   txt(g,60,220,"дополнувањето со нули ги изедначува должините пред проекцијата",null);
+   txt(g,60,242,"components_per_level = [1, 3] ја одредува маската во следниот чекор",null);
+ }},
+{t:"Маската — кој смее со кого",sh:[["mask_and_indexes([1, 3])","→ [4, 4] булова маска"]],dur:11,
+ b:["Вниманието <b>не е слободно</b>. Маската дозволува само две работи: компоненти од <b>исто ниво</b> да се гледаат меѓу себе, и компонента да ја гледа својата <b>надредена/подредена</b> компонента.",
+    "Компонента од ниво 2 не може да разговара со несродна компонента преку нивоа. Хиерархијата е физички впишана во тоа што вниманието го гледа.",
+    "Тоа е разликата меѓу „внимание над сè“ и „внимание по структура на периодичност“."],
+ s:"layers/PerimidFormer_EncDec.py · mask_and_indexes",
+ draw:g=>{
+   const lbl=["ниво1 #0","ниво2 #1","ниво2 #2","ниво2 #3"];
+   const M=[[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]];
+   const x0=300,y0=60,c=42;
+   txt(g,x0,48,"дозволено внимание","lbl");
+   for(let r=0;r<4;r++)for(let q=0;q<4;q++){
+     add(g,"rect",{x:x0+q*c,y:y0+r*c,width:c-3,height:c-3,rx:2,
+       fill:M[r][q]?"var(--model)":"var(--surface-2)",opacity:M[r][q]?.55:1,stroke:"var(--line)",
+       class:"grow",style:"--d:"+((r*4+q)*.4)});
+   }
+   lbl.forEach((s,i)=>{ txt(g,x0-8,y0+i*c+24,s,null,{"text-anchor":"end"});
+     txt(g,x0+i*c+18,y0-8,"#"+i,null,{"text-anchor":"middle"}); });
+   const tree=add(g,"g",{class:"fade",style:"--d:8"});
+   add(tree,"rect",{x:560,y:64,width:200,height:28,rx:2,fill:"var(--model)",opacity:.32,stroke:"var(--model)"});
+   txt(tree,660,83,"#0",null,{"text-anchor":"middle"});
+   for(let i=0;i<3;i++){
+     add(tree,"rect",{x:560+i*68,y:140,width:62,height:28,rx:2,fill:"var(--model)",opacity:.5,stroke:"var(--model)"});
+     txt(tree,591+i*68,159,"#"+(i+1),null,{"text-anchor":"middle"});
+     add(tree,"path",{d:`M660 94 L${591+i*68} 138`,stroke:"var(--m4)","stroke-width":1.2,fill:"none"});
+   }
+   txt(tree,560,190,"родител ↔ дете","lbl",{style:"fill:var(--m4)"});
+   txt(tree,560,212,"браќа ↔ браќа",null);
+   txt(g,60,254,"со овие два периода секоја компонента е поврзана со секоја — маската станува ограничувачка кога нивоата се повеќе",null);
+ }},
+{t:"Енкодер × 3 врз пирамидата",sh:[["FullAttention(mask) + FFN","[6, 4, 3, 32]"]],dur:8,
+ b:["Три <code>EncoderLayer</code>: маскирано внимание со 4 глави, резидуал, потоа <code>PositionwiseFeedForward</code> — <code>Linear(32 → 32)</code>, GELU, <code>Linear(32 → 32)</code>, резидуал и LayerNorm на крајот.",
+    "Забележи дека овде <code>d_inner = d_model = 32</code>, а не 256 — Peri-midFormer користи потесен FFN од другите три."],
+ s:"Encoder · EncoderLayer · PositionwiseFeedForward",
+ draw:g=>{
+   for(let l=0;l<3;l++){ const x=60+l*280;
+     add(g,"rect",{x,y:80,width:250,height:110,rx:3,fill:"var(--surface-2)",stroke:"var(--model)",class:"fade",style:"--d:"+(l*3)});
+     txt(g,x+125,104,"EncoderLayer "+(l+1),"big",{"text-anchor":"middle",style:"fill:var(--model)"});
+     txt(g,x+125,128,"FullAttention(mask_flag=True)",null,{"text-anchor":"middle"});
+     txt(g,x+125,148,"+ резидуал",null,{"text-anchor":"middle"});
+     txt(g,x+125,168,"FFN 32 → 32 · GELU · LayerNorm",null,{"text-anchor":"middle"});
+     if(l<2) arrow(g,x+252,135,x+278,l*3+2);
+   }
+   txt(g,60,232,"истата маска се применува во сите три слоја","lbl");
+   txt(g,60,256,"formата не се менува: [6, 4, 3, 32] влегува и излегува",null);
+ }},
+{t:"Периодични текови — патеки низ пирамидата",sh:[["gather по indexes","→ [18, 3, 64]"]],dur:12,
+ b:["Наместо да ја спушти пирамидата со просек, моделот вади <b>патеки корен → лист</b>. Со <code>[1, 3]</code> има <b>3 патеки</b>: #0→#1, #0→#2, #0→#3.",
+    "Секоја патека се спојува во еден вектор: 2 компоненти × 32 = <b>64</b>. Тоа се „периодични текови на карактеристики“ — секој тек е една низа од груб кон фин период.",
+    "<code>torch.gather</code> ги собира по претходно пресметаните индекси; резултатот е <code>[18, 3, 64]</code>, потоа <code>[6, 3, 3, 64]</code>."],
+ s:"Encoder.forward · torch.gather(enc_out, 1, indexes)",
+ draw:g=>{
+   const root=[450,72];
+   const leaves=[[240,180],[450,180],[660,180]];
+   add(g,"rect",{x:root[0]-56,y:root[1]-16,width:112,height:32,rx:3,fill:"var(--model)",opacity:.35,stroke:"var(--model)",class:"grow",style:"--d:0"});
+   txt(g,root[0],root[1]+5,"#0  [32]",null,{"text-anchor":"middle"});
+   leaves.forEach((p,i)=>{
+     add(g,"path",{d:`M${root[0]} ${root[1]+18} L${p[0]} ${p[1]-18}`,stroke:"var(--measured)","stroke-width":2,
+       class:"pen",style:"--len:200;--d:"+(2+i*2),"stroke-dasharray":200});
+     add(g,"rect",{x:p[0]-56,y:p[1]-16,width:112,height:32,rx:3,fill:"var(--model)",opacity:.5,stroke:"var(--model)",class:"grow",style:"--d:"+(3+i*2)});
+     txt(g,p[0],p[1]+5,"#"+(i+1)+"  [32]",null,{"text-anchor":"middle"});
+     const f=add(g,"g",{class:"fade",style:"--d:"+(9+i)});
+     add(f,"rect",{x:p[0]-70,y:224,width:140,height:26,rx:2,fill:"var(--measured)",opacity:.28,stroke:"var(--measured)"});
+     txt(f,p[0],241,"тек "+(i+1)+" · [64]",null,{"text-anchor":"middle",style:"fill:var(--measured)"});
+     add(f,"path",{d:`M${p[0]} ${p[1]+18} V222`,stroke:"var(--measured)","stroke-width":1,"stroke-dasharray":"3 3"});
+   });
+   txt(g,60,272,"3 текови × 64 = точно d_model × top_k, што и го очекува следниот линеарен слој",null);
+ }},
+{t:"Проекција, просек и враќање на трендот",sh:[["Linear(64 → 2) → mean → + trend","→ [6, 2, 3]"]],dur:10,
+ b:["Секој тек се проектира во <code>label_len + pred_len = 2</code> чекори, потоа трите текови се <b>просечат</b> (<code>mean(dim=-2)</code>).",
+    "Резултатот се пренаредува во <code>[6, 2, 3]</code> и на него се <b>додава трендот</b> што чекаше од чекор 3.",
+    "На крај де-нормализација со μ и σ, и <code>exp_main</code> зема <code>[:, -1:, -1:]</code> → <b>[6, 1, 1]</b>."],
+ s:"Model.forecast · dec_out = dec_out + trend_part",
+ draw:g=>{
+   tensor(g,{x:34,y:74,w:180,h:120,dims:[6,3,3,64],d:0,dim2:"текови"});
+   arrow(g,226,134,266,2);
+   opBox(g,{x:272,y:106,w:150,h:56,lines:["Linear(64 → 2)"],d:3});
+   arrow(g,428,134,468,4);
+   opBox(g,{x:474,y:106,w:150,h:56,lines:["mean по текови"],d:5});
+   arrow(g,630,134,670,6);
+   const s=add(g,"g",{class:"fade",style:"--d:7"});
+   add(s,"rect",{x:676,y:106,width:70,height:56,rx:3,fill:"var(--model)",opacity:.3,stroke:"var(--model)"});
+   txt(s,711,140,"[6,2,3]",null,{"text-anchor":"middle"});
+   txt(s,762,140,"+","big",{style:"fill:var(--measured)","font-size":"20px"});
+   add(s,"rect",{x:782,y:106,width:74,height:56,rx:3,fill:"var(--measured)",opacity:.3,stroke:"var(--measured)"});
+   txt(s,819,134,"trend",null,{"text-anchor":"middle",style:"fill:var(--measured)"});
+   txt(s,819,150,"[6,2,3]",null,{"text-anchor":"middle"});
+   const f=add(g,"g",{class:"fade",style:"--d:9"});
+   add(f,"path",{d:"M450 196 V226",stroke:"var(--line)","stroke-width":1.4});
+   opBox(f,{x:300,y:230,w:300,h:50,lines:["× σ + μ  →  [:, −1:, −1:]  →  [6, 1, 1]"],color:"var(--measured)",d:0});
+ }}];
+
+const MODELS=[
+ {id:"patchtst",name:"PatchTST",c:"var(--m1)",src:"models/PatchTST.py · layers/PatchTST_backbone.py",steps:PATCH},
+ {id:"cats",name:"CATS",c:"var(--m2)",src:"models/CATS.py",steps:CATS},
+ {id:"deformable",name:"DeformableTST",c:"var(--m3)",src:"models/DeformableTST.py · layers/Global_Attn.py",steps:DEF},
+ {id:"perimid",name:"Peri-midFormer",c:"var(--m4)",src:"models/PerimidFormer.py · layers/PerimidFormer_EncDec.py",steps:PERI}
+];
+
+/* ── плеер ────────────────────────────────────────────────────── */
+const FLAT=[];
+MODELS.forEach((m,mi)=>m.steps.forEach((s,si)=>FLAT.push({m,mi,s,si})));
+
+const vizg=document.getElementById("vizg"), vizTitle=document.getElementById("vizTitle");
+const tabs=document.getElementById("tabs"), spine=document.getElementById("spine");
+const stepNo=document.getElementById("stepNo"), stepTitle=document.getElementById("stepTitle");
+const stepShape=document.getElementById("stepShape"), stepBody=document.getElementById("stepBody");
+const stepSrc=document.getElementById("stepSrc"), bar=document.getElementById("bar");
+const count=document.getElementById("count"), playBtn=document.getElementById("play");
+let i=-1, playing=false, speed=1, t0=0, raf=0;
+
+MODELS.forEach((m,mi)=>{
+  const b=document.createElement("button");
+  b.textContent=m.name; b.style.setProperty("--c",m.c);
+  b.addEventListener("click",()=>{ go(FLAT.findIndex(f=>f.mi===mi)); });
+  tabs.appendChild(b);
+});
+const tabBtns=[...tabs.children];
+
+function buildSpine(mi){
+  spine.textContent="";
+  MODELS[mi].steps.forEach((s,si)=>{
+    const b=document.createElement("button");
+    b.title=(si+1)+". "+s.t;
+    b.addEventListener("click",()=>go(FLAT.findIndex(f=>f.mi===mi&&f.si===si)));
+    spine.appendChild(b);
+  });
+}
+function go(n){
+  n=(n+FLAT.length)%FLAT.length;
+  if(n===i) return;
+  const prevMi = i>=0 ? FLAT[i].mi : -1;
+  i=n;
+  const {m,mi,s,si}=FLAT[i];
+  document.documentElement.style.setProperty("--model",m.c);
+  if(mi!==prevMi) buildSpine(mi);
+  tabBtns.forEach((b,k)=>b.setAttribute("aria-current",k===mi?"true":"false"));
+  [...spine.children].forEach((b,k)=>{
+    b.setAttribute("aria-current",k===si?"true":"false");
+    b.classList.toggle("done",k<si);
+  });
+  stepNo.textContent=m.name+" · чекор "+(si+1)+" од "+m.steps.length;
+  stepTitle.textContent=s.t;
+  stepShape.textContent="";
+  s.sh.forEach(([k,v])=>{
+    const a=document.createElement("span"); a.textContent=k;
+    const b2=document.createElement("b"); b2.textContent=v;
+    stepShape.append(a,b2);
+  });
+  stepBody.textContent="";
+  s.b.forEach(html=>{ const p=document.createElement("p"); p.className="body"; p.innerHTML=html; stepBody.appendChild(p); });
+  stepSrc.textContent=s.s;
+  vizTitle.textContent=m.name+" — "+s.t;
+  vizg.textContent="";
+  void vizg.offsetWidth;
+  s.draw(vizg);
+  count.textContent=String(i+1).padStart(2,"0")+" / "+FLAT.length;
+  t0=performance.now(); bar.style.width="0%";
+}
+const dur=()=>(FLAT[i].s.dur||8)*1000/speed;
+function tick(now){
+  if(!playing) return;
+  const p=Math.min(1,(now-t0)/dur());
+  bar.style.width=(p*100).toFixed(2)+"%";
+  if(p>=1) go(i+1);
+  raf=requestAnimationFrame(tick);
+}
+function play(){ playing=true; playBtn.textContent="❙❙"; t0=performance.now(); cancelAnimationFrame(raf); raf=requestAnimationFrame(tick); }
+function pause(){ playing=false; playBtn.textContent="▶"; cancelAnimationFrame(raf); }
+playBtn.addEventListener("click",()=>playing?pause():play());
+document.getElementById("prev").addEventListener("click",()=>{go(i-1);t0=performance.now();});
+document.getElementById("next").addEventListener("click",()=>{go(i+1);t0=performance.now();});
+document.getElementById("prevM").addEventListener("click",()=>{
+  const mi=FLAT[i].mi; go(FLAT.findIndex(f=>f.mi===(mi+MODELS.length-1)%MODELS.length)); t0=performance.now(); });
+document.getElementById("nextM").addEventListener("click",()=>{
+  const mi=FLAT[i].mi; go(FLAT.findIndex(f=>f.mi===(mi+1)%MODELS.length)); t0=performance.now(); });
+document.querySelectorAll(".speeds button").forEach(b=>{
+  b.addEventListener("click",()=>{
+    speed=parseFloat(b.dataset.s);
+    document.documentElement.style.setProperty("--u",(1/speed)+"s");
+    document.querySelectorAll(".speeds button").forEach(o=>o.setAttribute("aria-pressed",String(o===b)));
+    t0=performance.now();
+  });
+});
+addEventListener("keydown",e=>{
+  if(e.target instanceof Element && e.target.matches("button") && e.key===" ") return;
+  if(e.key===" "){ e.preventDefault(); playing?pause():play(); }
+  else if(e.key==="ArrowRight"){ e.shiftKey?document.getElementById("nextM").click():(go(i+1),t0=performance.now()); }
+  else if(e.key==="ArrowLeft"){ e.shiftKey?document.getElementById("prevM").click():(go(i-1),t0=performance.now()); }
+  else if(e.key==="Home"){ go(0); }
+});
+go(0); play();
+</script>

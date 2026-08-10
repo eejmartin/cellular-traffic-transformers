@@ -1,0 +1,1307 @@
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Четири трансформери — тренирање, предикција, одлука</title>
+
+<style>
+/* ─────────────────────────────────────────────────────────────
+   Токени. Светлата палета е дефинирана на голиот :root; темната
+   само ги редефинира истите токени, двапати — еднаш за системска
+   темна тема, еднаш за експлицитен избор.
+   ───────────────────────────────────────────────────────────── */
+:root{
+  --u: 1s;                 /* временска единица за анимации (се скалира со брзината) */
+
+  --bg:        #E9ECF0;
+  --surface:   #F6F8FA;
+  --surface-2: #DFE4EA;
+  --line:      #C4CCD5;
+  --line-soft: #D8DEE5;
+  --ink:       #121A23;
+  --ink-2:     #45525E;
+  --muted:     #6C7A87;
+
+  --accent:    #1B6E8A;    /* прогноза */
+  --measured:  #A9631C;    /* измерено */
+  --good:      #2A7355;
+  --risk:      #A93A28;
+
+  --m1: #2C68BC;           /* PatchTST */
+  --m2: #A03F66;           /* CATS */
+  --m3: #1F7A5E;           /* DeformableTST */
+  --m4: #87601D;           /* Peri-midFormer */
+
+  --sans: "Segoe UI Variable Display","Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+  --mono: ui-monospace,"Cascadia Mono","Cascadia Code",Consolas,"SFMono-Regular",Menlo,monospace;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0C131A; --surface:#141D26; --surface-2:#1C2833; --line:#2C3A47; --line-soft:#223039;
+    --ink:#E6EDF3; --ink-2:#AEBDC9; --muted:#7F91A0;
+    --accent:#4FB6CD; --measured:#DFA05C; --good:#5CC79A; --risk:#F07C6C;
+    --m1:#6FA9F0; --m2:#E68CAD; --m3:#5DC6A3; --m4:#D8AD64;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0C131A; --surface:#141D26; --surface-2:#1C2833; --line:#2C3A47; --line-soft:#223039;
+  --ink:#E6EDF3; --ink-2:#AEBDC9; --muted:#7F91A0;
+  --accent:#4FB6CD; --measured:#DFA05C; --good:#5CC79A; --risk:#F07C6C;
+  --m1:#6FA9F0; --m2:#E68CAD; --m3:#5DC6A3; --m4:#D8AD64;
+}
+
+*,*::before,*::after{ box-sizing:border-box }
+html,body{ height:100% }
+body{
+  margin:0; background:var(--bg); color:var(--ink);
+  font-family:var(--sans); font-size:16px; line-height:1.5;
+  -webkit-font-smoothing:antialiased;
+}
+:focus-visible{ outline:2px solid var(--accent); outline-offset:2px; border-radius:3px }
+
+.app{ height:100dvh; display:grid; grid-template-rows:auto 1fr auto }
+
+/* ── Заглавие ─────────────────────────────────────────────── */
+.bar{
+  display:flex; align-items:center; gap:1.25rem; flex-wrap:wrap;
+  padding:.7rem clamp(.9rem,2.5vw,1.6rem);
+  background:var(--surface); border-bottom:1px solid var(--line);
+}
+.brand{ display:flex; align-items:baseline; gap:.7rem; min-width:0 }
+.brand b{ font-size:1.02rem; font-weight:700; letter-spacing:-.015em; white-space:nowrap }
+.brand span{
+  font-family:var(--mono); font-size:.7rem; color:var(--muted);
+  letter-spacing:.04em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+}
+.brand a.deep{
+  font-family:var(--mono); font-size:.7rem; color:var(--accent); text-decoration:none;
+  white-space:nowrap; border-bottom:1px dotted var(--accent); letter-spacing:.02em;
+}
+.brand a.deep:hover{ color:var(--ink); border-color:var(--ink) }
+.rail{ display:flex; gap:.3rem; margin-left:auto; flex-wrap:wrap }
+.rail button{
+  font:inherit; font-family:var(--mono); font-size:.68rem; letter-spacing:.03em;
+  padding:.3rem .55rem; border-radius:2px; cursor:pointer;
+  background:transparent; color:var(--muted);
+  border:1px solid transparent; border-bottom:2px solid var(--line-soft);
+  transition:color .15s, border-color .15s, background .15s;
+}
+.rail button:hover{ color:var(--ink); background:var(--surface-2) }
+.rail button[aria-current="true"]{ color:var(--ink); border-bottom-color:var(--accent); font-weight:600 }
+
+/* ── Сцена ────────────────────────────────────────────────── */
+.stage{ position:relative; overflow:hidden }
+.scene{
+  position:absolute; inset:0; overflow:auto;
+  padding:clamp(1rem,2.4vw,2rem) clamp(1rem,3vw,2.4rem) 1.4rem;
+  visibility:hidden; opacity:0;
+}
+.scene.is-active{ visibility:visible; opacity:1 }
+
+.eyebrow{
+  font-family:var(--mono); font-size:.7rem; letter-spacing:.16em; text-transform:uppercase;
+  color:var(--muted); display:flex; align-items:center; gap:.6rem; margin:0 0 .35rem;
+}
+.eyebrow::before{
+  content:""; width:1.6rem; height:2px; background:var(--accent); flex:none;
+}
+h1{ font-size:clamp(1.35rem,2.7vw,2rem); line-height:1.15; letter-spacing:-.025em; margin:0 0 .3rem; text-wrap:balance }
+.lede{ color:var(--ink-2); max-width:74ch; margin:0 0 1.1rem; font-size:.97rem }
+
+.grid{ display:grid; gap:1rem }
+.cols-2{ grid-template-columns:repeat(auto-fit,minmax(320px,1fr)) }
+.cols-3{ grid-template-columns:repeat(auto-fit,minmax(240px,1fr)) }
+.split{ display:grid; gap:1.1rem; grid-template-columns:minmax(0,1.55fr) minmax(260px,.85fr); align-items:start }
+@media (max-width:900px){ .split{ grid-template-columns:1fr } }
+
+.card{
+  background:var(--surface); border:1px solid var(--line);
+  border-radius:4px; padding:.9rem 1rem;
+}
+.card h3{
+  margin:0 0 .5rem; font-size:.82rem; letter-spacing:.02em;
+  display:flex; align-items:center; gap:.5rem;
+}
+.card h3 .tag{
+  font-family:var(--mono); font-size:.66rem; font-weight:500; color:var(--muted);
+  border:1px solid var(--line); border-radius:2px; padding:.05rem .3rem;
+}
+.stack{ display:flex; flex-direction:column; gap:.55rem }
+
+dl.facts{ margin:0; display:grid; grid-template-columns:auto 1fr; gap:.3rem .75rem; align-items:baseline }
+dl.facts dt{ font-family:var(--mono); font-size:.72rem; color:var(--muted); white-space:nowrap }
+dl.facts dd{ margin:0; font-size:.85rem; color:var(--ink) }
+
+ul.notes{ margin:0; padding-left:1.05rem; display:flex; flex-direction:column; gap:.35rem }
+ul.notes li{ font-size:.86rem; color:var(--ink-2) }
+ul.notes li b{ color:var(--ink); font-weight:600 }
+
+code,.mono{ font-family:var(--mono); font-size:.86em }
+code{ background:var(--surface-2); padding:.06em .32em; border-radius:2px; color:var(--ink) }
+
+.figure{
+  background:var(--surface); border:1px solid var(--line); border-radius:4px;
+  padding:.8rem .9rem .6rem; overflow-x:auto;
+}
+.figure svg{ display:block; width:100%; height:auto; min-width:420px }
+.caption{
+  font-family:var(--mono); font-size:.68rem; color:var(--muted);
+  margin-top:.5rem; letter-spacing:.02em;
+}
+
+.chips{ display:flex; flex-wrap:wrap; gap:.35rem }
+.chip{
+  font-family:var(--mono); font-size:.7rem; padding:.2rem .45rem; border-radius:2px;
+  border:1px solid var(--line); color:var(--ink-2); background:var(--surface);
+}
+.chip.hot{ border-color:var(--accent); color:var(--accent); font-weight:600 }
+.chip.risk{ border-color:var(--risk); color:var(--risk) }
+.chip.good{ border-color:var(--good); color:var(--good) }
+
+.callout{
+  border-left:2px solid var(--accent); padding:.15rem 0 .15rem .7rem;
+  font-size:.86rem; color:var(--ink-2);
+}
+.callout b{ color:var(--ink) }
+
+/* SVG заеднички */
+svg text{ font-family:var(--mono); fill:var(--muted); font-size:9px; letter-spacing:.02em }
+svg text.lbl{ fill:var(--ink-2); font-size:10px }
+svg text.big{ fill:var(--ink); font-size:11px; font-weight:600 }
+svg .axis{ stroke:var(--line); stroke-width:1 }
+svg .soft{ stroke:var(--line-soft); stroke-width:1 }
+
+/* ── Транспорт ────────────────────────────────────────────── */
+.transport{
+  display:flex; align-items:center; gap:.85rem; flex-wrap:wrap;
+  padding:.55rem clamp(.9rem,2.5vw,1.6rem);
+  background:var(--surface); border-top:1px solid var(--line);
+}
+.transport button{
+  font:inherit; cursor:pointer; background:var(--surface-2); color:var(--ink);
+  border:1px solid var(--line); border-radius:3px; padding:.3rem .6rem;
+  display:inline-flex; align-items:center; justify-content:center; min-width:2.1rem;
+}
+.transport button:hover{ border-color:var(--accent); color:var(--accent) }
+#play{ min-width:2.6rem; font-weight:700 }
+.counter{ font-family:var(--mono); font-size:.72rem; color:var(--muted); white-space:nowrap }
+.now{ font-size:.82rem; color:var(--ink-2); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0 }
+.progress{ flex:1 1 160px; height:3px; background:var(--surface-2); border-radius:2px; overflow:hidden; min-width:90px }
+.progress i{ display:block; height:100%; width:0; background:var(--accent) }
+.speeds{ display:flex; gap:.2rem }
+.speeds button{ font-family:var(--mono); font-size:.7rem; padding:.25rem .4rem; min-width:0 }
+.speeds button[aria-pressed="true"]{ border-color:var(--accent); color:var(--accent); font-weight:700 }
+
+/* ── Систем за влез на елементи ───────────────────────────── */
+.r{ opacity:0 }
+.scene.is-active .r{
+  animation:rise calc(.62*var(--u)) cubic-bezier(.2,.75,.25,1) both;
+  animation-delay:calc(var(--d,0) * .16 * var(--u));
+}
+@keyframes rise{ from{ opacity:0; transform:translateY(7px) } to{ opacity:1; transform:none } }
+
+/* цртање на патеки */
+.draw{ stroke-dasharray:var(--len,600); stroke-dashoffset:var(--len,600) }
+.scene.is-active .draw{
+  animation:draw calc(1.9*var(--u)) ease-out both;
+  animation-delay:calc(var(--d,0) * .16 * var(--u));
+}
+@keyframes draw{ to{ stroke-dashoffset:0 } }
+
+/* пулсирачки блок */
+.scene.is-active .pulse{
+  animation:pulse calc(1.6*var(--u)) ease-in-out infinite;
+  animation-delay:calc(var(--d,0) * .16 * var(--u));
+}
+@keyframes pulse{ 0%,100%{ opacity:.35 } 50%{ opacity:1 } }
+
+/* појавување на низа елементи */
+.scene.is-active .pop{
+  animation:pop calc(.5*var(--u)) cubic-bezier(.2,.9,.2,1) both;
+  animation-delay:calc(var(--d,0) * .1 * var(--u));
+}
+@keyframes pop{ from{ opacity:0; transform:scale(.55) } to{ opacity:1; transform:none } }
+
+@media (prefers-reduced-motion: reduce){
+  .scene.is-active .r,
+  .scene.is-active .draw,
+  .scene.is-active .pop{ animation-duration:1ms !important; animation-delay:0ms !important }
+  .scene.is-active .pulse{ animation:none; opacity:1 }
+  .scene.is-active [class*="anim-"]{ animation:none !important }
+  .r{ opacity:1 }
+  .draw{ stroke-dashoffset:0 }
+}
+</style>
+
+<div class="app">
+
+  <header class="bar">
+    <div class="brand">
+      <b>Четири трансформери за предвидување на оптоварување во RAN</b>
+      <a class="deep" href="models.html">длабоко низ моделите, тензор по тензор →</a>
+    </div>
+    <nav class="rail" id="rail" aria-label="Сцени"></nav>
+  </header>
+
+  <main class="stage" id="stage">
+
+    <!-- ══════════════ 0 · МАПА ══════════════ -->
+    <section class="scene" data-title="Мапа на пајплајнот" data-dur="15">
+      <p class="eyebrow r" style="--d:0">Преглед</p>
+      <h1 class="r" style="--d:1">Еден идентичен протокол, четири архитектури</h1>
+      <p class="lede r" style="--d:2">
+        За секоја базна станица се тренира <b>посебна инстанца</b> од секој од четирите модели.
+        Сè друго — податоци, поделба, прозорци, загуба, оптимизатор, метрики — е намерно исто,
+        за да биде разликата меѓу моделите единственото што се менува.
+      </p>
+
+      <div class="figure r" style="--d:3">
+        <svg viewBox="0 0 900 190" role="img" aria-label="Тек: CSV по станица, прозорец од 24 часа, четири модели, избор по RSE, одлука во мрежата">
+          <g id="map-flow"></g>
+        </svg>
+        <p class="caption">по станица: 1 CSV → прозорци 24 h → 4 модели → метрики → одлука</p>
+      </div>
+
+      <div class="grid cols-3" style="margin-top:1rem">
+        <div class="card r" style="--d:5">
+          <h3>Што се предвидува <span class="tag">target</span></h3>
+          <p style="margin:0;font-size:.86rem;color:var(--ink-2)">
+            Бројот на активни корисници <code>users</code> на станица, за <b>следниот час</b>
+            (<code>pred_len = 1</code>), од <b>24 часа историја</b> (<code>seq_len = 24</code>).
+          </p>
+        </div>
+        <div class="card r" style="--d:6">
+          <h3>Колку модели се тренираат <span class="tag">run.py</span></h3>
+          <p style="margin:0;font-size:.86rem;color:var(--ink-2)">
+            4 архитектури × N станици. За Сет 1 тоа се 4 × 91 = <b>364</b> посебни тренирања
+            по кампања, секое со свој <code>checkpoint.pth</code>.
+          </p>
+        </div>
+        <div class="card r" style="--d:7">
+          <h3>Детерминизам <span class="tag">seed</span></h3>
+          <p style="margin:0;font-size:.86rem;color:var(--ink-2)">
+            <code>seed_everything(2021)</code> се повикува <b>пред</b> градењето на моделот,
+            па иста команда дава идентични метрики.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 1 · ПОДАТОЦИ ══════════════ -->
+    <section class="scene" data-title="Податоци" data-dur="19">
+      <p class="eyebrow r" style="--d:0">Чекор 1 · база на податоци</p>
+      <h1 class="r" style="--d:1">Врз што се учи и врз што се предвидува</h1>
+      <p class="lede r" style="--d:2">
+        Две независни бази, избирани со единствениот флег за податоци во <code>run.py</code>.
+        Во двете, <b>секоја станица е своја датотека и свој модел</b>.
+      </p>
+
+      <div class="grid cols-2">
+        <div class="card r" style="--d:3">
+          <h3 style="color:var(--m1)">Сет 1 <span class="tag">-f bs · стандардно</span></h3>
+          <dl class="facts">
+            <dt>станици</dt><dd>91, во три категории по обем</dd>
+            <dt>патека</dt><dd><code>data/{big_bs,medium_bs,small_bs}/bs_&lt;id&gt;.csv</code></dd>
+            <dt>редови</dt><dd>~192 часовни по станица</dd>
+            <dt>колони</dt><dd><code>time_hour, packets, bytes, users</code></dd>
+            <dt>seq_len</dt><dd>24 → ~110 / ~20 / ~38 прозорци</dd>
+            <dt>потекло</dt><dd>ФЕИТ/УКИМ, не се редистрибуира</dd>
+          </dl>
+        </div>
+        <div class="card r" style="--d:4">
+          <h3 style="color:var(--m3)">Сет 2 <span class="tag">-f big_data</span></h3>
+          <dl class="facts">
+            <dt>станици</dt><dd>17.327 (трудот користи првите 100)</dd>
+            <dt>патека</dt><dd><code>data/big_data/parsed/concat/{4G,5G}/bs_&lt;id&gt;.csv</code></dd>
+            <dt>редови</dt><dd>48 часовни: работен ден + викенд-ден</dd>
+            <dt>колони</dt><dd><code>time_hour, prb, bytes, users</code></dd>
+            <dt>seq_len</dt><dd>12 → 21 / 6 / 9 прозорци</dd>
+            <dt>потекло</dt><dd>Tsinghua FIB Lab NetData → <code>parse_big_data.py</code></dd>
+          </dl>
+        </div>
+      </div>
+
+      <div class="split" style="margin-top:1rem">
+        <div class="figure r" style="--d:5">
+          <svg viewBox="0 0 900 150" role="img" aria-label="Три влезни канали и една излезна цел">
+            <g id="chan-flow"></g>
+          </svg>
+          <p class="caption">features = "MS": 3 канали влез → 1 канал излез (<code>users</code> секогаш последна колона)</p>
+        </div>
+        <div class="card r" style="--d:6">
+          <h3>Две одлуки што важат за сите четири</h3>
+          <ul class="notes">
+            <li><b><code>features = "MS"</code></b> — сите 3 нумерички колони влегуваат, но се предвидува само <code>users</code>.</li>
+            <li><b><code>scale = False</code></b> — податоците остануваат во сурови единици, па грешките се читаат директно како „број на корисници“. Тоа е безбедно бидејќи <b>сите четири модели нормализираат внатрешно по прозорец</b> и де-нормализираат на излез.</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 2 · ПРОЗОРЦИ ══════════════ -->
+    <section class="scene" data-title="Поделба и прозорци" data-dur="20">
+      <p class="eyebrow r" style="--d:0">Чекор 2 · што влегува во моделот</p>
+      <h1 class="r" style="--d:1">Хронолошка поделба, потоа лизгачки прозорец</h1>
+      <p class="lede r" style="--d:2">
+        Поделбата е <b>по време, без мешање</b> — 70 % најстари часови за тренирање, следните 10 % за
+        валидација, последните 20 % за тест. Од секој дел се сечат прозорци: 24 часа влез, следниот час цел.
+      </p>
+
+      <div class="figure r" style="--d:3">
+        <svg viewBox="0 0 900 235" role="img" aria-label="Серија поделена на тренинг, валидација и тест, со лизгачки прозорец од 24 часа">
+          <g id="split-fig"></g>
+        </svg>
+        <p class="caption">лизгачкиот прозорец се движи низ секој дел одделно · <code>__getitem__</code> во <code>data_provider/data_loader.py</code></p>
+      </div>
+
+      <div class="grid cols-3" style="margin-top:1rem">
+        <div class="card r" style="--d:5">
+          <h3>Пресметката на границите</h3>
+          <p style="margin:0;font-size:.85rem;color:var(--ink-2)">
+            Валидацискиот и тест-делот почнуваат <b><code>seq_len</code> часа порано</b> од номиналната граница,
+            за првиот прозорец во делот да има полна историја. Затоа нема „скратени“ примероци.
+          </p>
+        </div>
+        <div class="card r" style="--d:6">
+          <h3>Еден примерок</h3>
+          <dl class="facts">
+            <dt>seq_x</dt><dd>часови <code>[i, i+24)</code>, 3 канали</dd>
+            <dt>seq_y</dt><dd>цел: час <code>i+24</code>, канал <code>users</code></dd>
+            <dt>марки</dt><dd>час, ден, ден-во-недела, месец</dd>
+          </dl>
+        </div>
+        <div class="card r" style="--d:7">
+          <h3>Зошто е тоа важно</h3>
+          <p style="margin:0;font-size:.85rem;color:var(--ink-2)">
+            Ниту еден иден час не влијае врз тренирањето. Истите прозорци, во ист редослед,
+            ги добиваат <b>сите четири модели</b> — споредбата останува валидна.
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 3 · PatchTST ══════════════ -->
+    <section class="scene" data-title="PatchTST" data-dur="21">
+      <p class="eyebrow r" style="--d:0">Модел 1 од 4 · <code>models/PatchTST.py</code></p>
+      <h1 class="r" style="--d:1">PatchTST — закрпи + канална независност</h1>
+      <p class="lede r" style="--d:2">
+        Прозорецот се сече на <b>преклопувачки закрпи</b> кои стануваат токени, а секој канал
+        поминува низ енкодерот <b>независно</b> од другите.
+      </p>
+
+      <div class="figure r" style="--d:3">
+        <svg viewBox="0 0 900 250" role="img" aria-label="24 часа се сечат на 20 закрпи по 6 часа, кои се вградуваат и минуваат низ енкодер">
+          <g id="patch-fig"></g>
+        </svg>
+        <p class="caption">RevIN → padding на крајот → <code>unfold(size=6, step=1)</code> = 20 закрпи → линеарна проекција во d_model=32</p>
+      </div>
+
+      <div class="split" style="margin-top:1rem">
+        <div class="card r" style="--d:5">
+          <h3>Тек низ моделот</h3>
+          <ul class="notes">
+            <li><b>RevIN</b> нормализира секој прозорец посебно (без учена афина трансформација, се одзема средината).</li>
+            <li><b>Закрпување:</b> <code>patch_len = 6</code>, <code>stride = 1</code>, репликационо дополнување на крајот → <b>20 закрпи</b> од по 6 часа.</li>
+            <li><b>Вградување:</b> секоја закрпа → линеарен слој во <code>d_model = 32</code> + научена позициска кодировка.</li>
+            <li><b>Енкодер:</b> 3 слоја, 4 глави, <code>d_ff = 256</code>, BatchNorm, резидуално внимание.</li>
+            <li><b>Канална независност:</b> трите канали се пресликуваат во batch-димензијата — истите тежини, без мешање меѓу каналите.</li>
+            <li><b>Глава:</b> Flatten преку закрпите → 1 чекор → де-нормализација назад во корисници.</li>
+          </ul>
+        </div>
+        <div class="card r" style="--d:6">
+          <h3>Специфично за овој модел</h3>
+          <p style="margin:0 0 .6rem;font-size:.85rem;color:var(--ink-2)">
+            PatchTST не додава ниту еден параметар над заедничките — во <code>MODEL_CONFIGS</code>
+            има само свое име. Тој е референтната точка на споредбата.
+          </p>
+          <div class="chips">
+            <span class="chip">e_layers 3</span><span class="chip">n_heads 4</span>
+            <span class="chip">d_model 32</span><span class="chip">d_ff 256</span>
+            <span class="chip">dropout 0.2</span><span class="chip">revin 1</span>
+            <span class="chip hot">Adam · 5e-4</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 4 · CATS ══════════════ -->
+    <section class="scene" data-title="CATS" data-dur="21">
+      <p class="eyebrow r" style="--d:0">Модел 2 од 4 · <code>models/CATS.py</code></p>
+      <h1 class="r" style="--d:1">CATS — само вкрстено внимание, без енкодер</h1>
+      <p class="lede r" style="--d:2">
+        CATS нема self-attention и нема енкодер. Иднината е <b>научен параметар</b>: една „dummy“
+        закрпа-прашалник која гледа во минатите закрпи и од нив го составува одговорот.
+      </p>
+
+      <div class="figure r" style="--d:3">
+        <svg viewBox="0 0 900 288" role="img" aria-label="Научена идна закрпа како прашалник кон 20 минати закрпи преку вкрстено внимание">
+          <g id="cats-fig"></g>
+        </svg>
+        <p class="caption">Q = научена идна закрпа · K,V = 20 минати закрпи · 3 слоја вкрстено внимание со резидуални скорови</p>
+      </div>
+
+      <div class="split" style="margin-top:1rem">
+        <div class="card r" style="--d:5">
+          <h3>Тек низ моделот</h3>
+          <ul class="notes">
+            <li><b>Инстанца-нормализација</b> по прозорец (средина и стандардна девијација по време), де-нормализација на излез.</li>
+            <li><b>Истото закрпување</b> како PatchTST — 20 закрпи од 6 часа — но тие служат <b>само како клучеви и вредности</b>.</li>
+            <li><b>Dummy прашалник:</b> <code>nn.Parameter</code> со облик „идни закрпи × 6“. За хоризонт од 1 час тоа е <b>една</b> закрпа, споделена меѓу каналите (<code>query_independence = True</code>).</li>
+            <li><b>3 слоја вкрстено внимание:</b> во секој слој прашалникот се ажурира, минатото останува непроменето; attention-скоровите се пренесуваат резидуално низ слоевите.</li>
+            <li><b>QAM</b> (query-adaptive masking) со веројатност 0.1 → 0.3 — активно <b>само при тренирање</b>.</li>
+            <li><b>Проекција</b> <code>d_model → 6</code>, па се задржува само првиот чекор.</li>
+          </ul>
+        </div>
+        <div class="card r" style="--d:6">
+          <h3>Што го прави различен</h3>
+          <p style="margin:0 0 .6rem;font-size:.85rem;color:var(--ink-2)">
+            Не постои патека по која минатото „зборува само со себе“. Целата пресметка тече
+            во една насока: од историјата кон едно фиксно прашање.
+          </p>
+          <div class="chips">
+            <span class="chip">d_layers 3</span><span class="chip">QAM 0.1→0.3</span>
+            <span class="chip">query_independence</span><span class="chip">GEGLU FFN</span>
+            <span class="chip hot">без self-attention</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 5 · DeformableTST ══════════════ -->
+    <section class="scene" data-title="DeformableTST" data-dur="21">
+      <p class="eyebrow r" style="--d:0">Модел 3 од 4 · <code>models/DeformableTST.py</code> + <code>layers/Global_Attn.py</code></p>
+      <h1 class="r" style="--d:1">DeformableTST — вниманието само учи каде да гледа</h1>
+      <p class="lede r" style="--d:2">
+        Без закрпи. Наместо да гледа во сите позиции, секој прашалник зема <b>мал број научени,
+        податочно зависни точки</b> — под-мрежа предвидува поместувања од референтна решетка.
+      </p>
+
+      <div class="figure r" style="--d:3">
+        <svg viewBox="0 0 900 250" role="img" aria-label="Референтни точки се поместуваат на научени позиции од кои се зема примерок">
+          <g id="deform-fig"></g>
+        </svg>
+        <p class="caption"><code>conv_offset</code> предвидува поместувања → се додаваат на референтната решетка → <code>F.grid_sample</code> зема K,V на континуирани позиции</p>
+      </div>
+
+      <div class="split" style="margin-top:1rem">
+        <div class="card r" style="--d:5">
+          <h3>Тек низ моделот</h3>
+          <ul class="notes">
+            <li><b>RevIN</b>, потоа <b>stem конволуција</b> со <code>stem_ratio = 1</code> — нема намалување на резолуцијата.</li>
+            <li><b>Една фаза, 3 блока</b> (<code>stage_spec = [["D","D","D"]]</code>). Оригиналната 4-фазна хиерархија би ги свела 24 чекори на 3, па се користи авторската конфигурација за кратки влезови.</li>
+            <li><b>LPU</b> — depthwise конволуција (k = 3) пред секој блок, за локален контекст.</li>
+            <li><b>Деформабилно внимание:</b> <code>conv_offset</code> ги предвидува поместувањата, <code>F.grid_sample</code> ги зема клучевите и вредностите на добиените позиции; 2 offset-групи, научена релативна позициска пристрасност.</li>
+            <li><b>DWC-MLP</b> со expansion 8 (32 × 8 = 256), stochastic depth 0.3.</li>
+            <li><b>Flatten</b> глава со LayerNorm → 1 чекор.</li>
+          </ul>
+        </div>
+        <div class="card r" style="--d:6">
+          <h3>Единственото намерно отстапување</h3>
+          <p style="margin:0 0 .6rem;font-size:.85rem;color:var(--ink-2)">
+            Овој модел тренира со <b>AdamW</b> и <b>загревање + косинус</b>, затоа што авторите
+            го објавуваат тоа како дел од методот. Тоа е експлицитно означено во <code>run.py</code>
+            и се отстранува со бришење на три клуча.
+          </p>
+          <div class="chips">
+            <span class="chip risk">AdamW · wd 0.05</span>
+            <span class="chip risk">warmup 5 епохи</span>
+            <span class="chip risk">lradj = cos</span>
+            <span class="chip">n_groups 2</span>
+            <span class="chip">fmap_size 24</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 6 · Peri-midFormer ══════════════ -->
+    <section class="scene" data-title="Peri-midFormer" data-dur="21">
+      <p class="eyebrow r" style="--d:0">Модел 4 од 4 · <code>models/PerimidFormer.py</code></p>
+      <h1 class="r" style="--d:1">Peri-midFormer — FFT ги наоѓа периодите, пирамидата ги подредува</h1>
+      <p class="lede r" style="--d:2">
+        Единствениот од четирите што <b>експлицитно бара периодичност</b>: серијата се разложува на
+        тренд и сезонски дел, а сезонскиот се преклопува во пирамида од периодични компоненти.
+      </p>
+
+      <div class="figure r" style="--d:3">
+        <svg viewBox="0 0 900 250" role="img" aria-label="Декомпозиција на тренд и сезонски дел, FFT спектар со два доминантни периода, и периодична пирамида">
+          <g id="perimid-fig"></g>
+        </svg>
+        <p class="caption"><code>series_decomp(25)</code> → <code>torch.fft.rfft</code> → <code>top_k = 2</code> периоди (период = L // индекс) → пирамида → внимание во и меѓу нивоата</p>
+      </div>
+
+      <div class="split" style="margin-top:1rem">
+        <div class="card r" style="--d:5">
+          <h3>Тек низ моделот</h3>
+          <ul class="notes">
+            <li><b>Временски карактеристики</b> — единствениот модел што ги добива марките за час/ден (<code>embed = "timeF"</code>, <code>freq = "h"</code>) заедно со серијата.</li>
+            <li><b>Декомпозиција</b> со подвижна средина (kernel 25) на тренд + сезонски дел; <b>трендот го предвидува посебен линеарен слој</b>.</li>
+            <li><b>FFT:</b> <code>rfft</code> по временската оска, се земаат <code>top_k = 2</code> најсилни амплитуди; периодот е должина ÷ индекс на фреквенцијата. Само 2, зашто 24 мостри разрешуваат малку периоди.</li>
+            <li><b>Пирамида:</b> сезонскиот дел се преформатира во периодични компоненти по ниво; внимание се пресметува <b>во</b> нивоата и <b>меѓу</b> нивоата, 3 слоја.</li>
+            <li><b>Излез:</b> проекција, средна агрегација по компонентите, должина <code>label_len + pred_len</code> — пајплајнот го зема последниот чекор.</li>
+          </ul>
+        </div>
+        <div class="card r" style="--d:6">
+          <h3>Зошто е тоа природно за RAN</h3>
+          <p style="margin:0 0 .6rem;font-size:.85rem;color:var(--ink-2)">
+            Мобилниот сообраќај има изразен дневен циклус и разлика работен ден / викенд.
+            Овој модел ја бара таа структура директно во фреквенцискиот домен, наместо да ја учи имплицитно.
+          </p>
+          <div class="chips">
+            <span class="chip">layers 3</span><span class="chip">top_k 2</span>
+            <span class="chip">moving_avg 25</span><span class="chip hot">FFT периоди</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ══════════════ 7 · ТРЕНИРАЊЕ ══════════════ -->
+    <section class="scene" data-title="Тренирање" data-dur="21">
+      <p class="eyebrow r" style="--d:0">Чекор 3 · <code>exp/exp_main.py</code></p>
+      <h1 class="r" style="--d:1">Еден циклус на тренирање за сите четири</h1>
+      <p class="lede r" style="--d:2">
+        Сите модели минуваат низ <b>иста</b> јамка. Единствената гранка по модел е како се повикува
+        <code>forward</code> — Peri-midFormer дополнително ги добива временските марки.
+      </p>
+
+      <div class="figure r" style="--d:3">
+        <svg viewBox="0 0 900 260" role="img" aria-label="Криви на загуба за тренирање и валидација, со маркер на најдобрата валидациска епоха">
+          <g id="train-fig"></g>
+        </svg>
+        <p class="caption">се зачувува <b>најдобрата валидациска епоха</b>, не последната · шематски приказ на кривите</p>
+      </div>
+
+      <div class="grid cols-3" style="margin-top:1rem">
+        <div class="card r" style="--d:5">
+          <h3>Протокол <span class="tag">SHARED_ARGS</span></h3>
+          <dl class="facts">
+            <dt>загуба</dt><dd>MSE на последниот чекор, канал <code>users</code></dd>
+            <dt>оптимизатор</dt><dd>Adam, lr 5e-4</dd>
+            <dt>batch</dt><dd>6 → ~18 чекори по епоха</dd>
+            <dt>епохи</dt><dd>најмногу 100</dd>
+            <dt>lradj</dt><dd><code>type3</code>: 2 епохи константно, потоа ×0.9</dd>
+          </dl>
+        </div>
+        <div class="card r" style="--d:6">
+          <h3>Рано запирање <span class="tag">patience 50</span></h3>
+          <p style="margin:0;font-size:.85rem;color:var(--ink-2)">
+            Критериумот е <b>валидациската</b> загуба. По завршување, тежините се вчитуваат од
+            <code>checkpoint.pth</code> — епохата со најдобра валидација. Тест-загубата се печати
+            за увид, но <b>никогаш не влијае</b> врз изборот.
+          </p>
+        </div>
+        <div class="card r" style="--d:7">
+          <h3>Од каде се хиперпараметрите</h3>
+          <p style="margin:0;font-size:.85rem;color:var(--ink-2)">
+            Мрежно пребарување <b>само на валидација</b> (<code>scripts/hp_search.py</code>):
+            12 конфигурации × 9 станици × 4 модели. Победник:
+            <code>d_model 32 · dropout 0.2 · lr 5e-4</code>.
+          </p>
+        </div>
+      </div>
+
+      <p class="callout r" style="--d:8;margin-top:.9rem">
+        <b>Опционално:</b> пет стратегии за пренос на знаење меѓу станици — <code>sequential</code>,
+        <code>ordered</code> (синџир по сличност), <code>grouped</code> (KMeans кластери),
+        <code>federated</code> (FedAvg), <code>combined</code>. Стандардно се <b>исклучени</b>:
+        секоја станица тренира од нула, за да бидат тренирањата независни и споредливи.
+      </p>
+    </section>
+
+    <!-- ══════════════ 8 · ПРЕДИКЦИЈА ══════════════ -->
+    <section class="scene" data-title="Предикција" data-dur="20">
+      <p class="eyebrow r" style="--d:0">Чекор 4 · каде се прави предвидувањето</p>
+      <h1 class="r" style="--d:1">Две различни предвидувања, две различни намени</h1>
+      <p class="lede r" style="--d:2">
+        Едното мери колку моделот вреди, другото е вистинската оперативна прогноза.
+      </p>
+
+      <div class="figure r" style="--d:3">
+        <svg viewBox="0 0 900 235" role="img" aria-label="Предвидување низ тест-делот и предвидување за часот по крајот на датотеката">
+          <g id="pred-fig"></g>
+        </svg>
+        <p class="caption">лево: секој тест прозорец → 1 час напред, се споредува со вистинската вредност · десно: последните 24 реда → часот по крајот на датотеката</p>
+      </div>
+
+      <div class="grid cols-2" style="margin-top:1rem">
+        <div class="card r" style="--d:5">
+          <h3 style="color:var(--accent)">Евалуација <span class="tag">exp.test()</span></h3>
+          <ul class="notes">
+            <li>Врви низ <b>тест-делот</b> — хронолошки последните 20 % часови, кои моделот никогаш не ги видел.</li>
+            <li>За секој прозорец: 24 h историја → 1 час напред, споредено со вистинската вредност.</li>
+            <li>Запишува <code>pred.npy</code>, <code>true.npy</code>, <code>metrics.npy</code>, <code>metrics_ext.json</code> и графици.</li>
+          </ul>
+        </div>
+        <div class="card r" style="--d:6">
+          <h3 style="color:var(--measured)">Оперативна прогноза <span class="tag">predict.py</span></h3>
+          <ul class="notes">
+            <li>Ги зема <b>последните 24 реда</b> од CSV и предвидува за часот <b>по крајот на датотеката</b> → <code>real_prediction.npy</code>.</li>
+            <li><code>predict.py --config &lt;run&gt;/&lt;model&gt;/configs/&lt;setting&gt;.json</code> ја реконструира точната архитектура и го вчитува најдобриот checkpoint.</li>
+            <li>Може да се насочи и кон друг CSV со ист распоред на колони.</li>
+          </ul>
+        </div>
+      </div>
+
+      <p class="callout r" style="--d:7;margin-top:.9rem">
+        <b>Ограничување запишано во кодот:</b> чекпоинтот е <b>специфичен за станицата</b> на која е трениран
+        (~110 прозорци). Примена врз друга станица технички работи, но се третира како пренос на знаење,
+        не како калибрирана прогноза.
+      </p>
+    </section>
+
+    <!-- ══════════════ 9 · ОДЛУКА ══════════════ -->
+    <section class="scene" data-title="Одлука" data-dur="24">
+      <p class="eyebrow r" style="--d:0">Чекор 5 · <code>analysis/</code></p>
+      <h1 class="r" style="--d:1">Од прогноза до одлука во мрежата</h1>
+      <p class="lede r" style="--d:2">
+        Одлуката се носи во четири слоја: се мери, се избира модел, се проценува несигурност,
+        и дури тогаш се менува нешто во мрежата.
+      </p>
+
+      <div class="split">
+        <div class="stack">
+          <div class="card r" style="--d:3">
+            <h3>1 · Мерење <span class="tag">utils/metrics.py</span></h3>
+            <div class="chips" style="margin-bottom:.5rem">
+              <span class="chip">MAE</span><span class="chip">MSE</span><span class="chip">RMSE</span>
+              <span class="chip">MAPE</span><span class="chip">MSPE</span>
+              <span class="chip hot">RSE</span><span class="chip">CORR</span>
+            </div>
+            <div class="chips">
+              <span class="chip">sMAPE</span><span class="chip">WAPE</span>
+              <span class="chip hot">MASE</span><span class="chip">bias (ME)</span>
+              <span class="chip">peak_mae</span><span class="chip risk">under_rate</span>
+              <span class="chip risk">peak_under_rate</span>
+            </div>
+            <p style="margin:.6rem 0 0;font-size:.84rem;color:var(--ink-2)">
+              <b>RSE ≥ 1</b> значи полошо од предвидување на просекот. <b>MASE &lt; 1</b> значи подобро
+              од наивна перзистенција („следниот час = овој час“). Двете се без-размерни, па
+              дозволуваат споредба меѓу станици со различен обем.
+            </p>
+          </div>
+
+          <div class="card r" style="--d:4">
+            <h3>2 · Избор на модел <span class="tag">analysis/report.py</span></h3>
+            <div class="figure" style="border:none;padding:0;background:none">
+              <svg viewBox="0 0 640 132" role="img" aria-label="Четирите модели се подредуваат по просечен RSE">
+                <g id="rank-fig"></g>
+              </svg>
+            </div>
+            <p style="margin:.5rem 0 0;font-size:.84rem;color:var(--ink-2)">
+              Правилото е буквално: се сортира по <code>rse_mean</code> и најнискиот победува,
+              придружено со бројот на станици на кои моделот има најнизок MSE.
+              <b>Шематски приказ</b> — вистинските вредности доаѓаат од излезот на кампањата.
+            </p>
+          </div>
+        </div>
+
+        <div class="stack">
+          <div class="card r" style="--d:5">
+            <h3>3 · Несигурност <span class="tag">analysis/conformal.py</span></h3>
+            <p style="margin:0;font-size:.85rem;color:var(--ink-2)">
+              Split-conformal: се земаат апсолутните резидуали на <b>валидацијата</b>, нивниот
+              90 % квантил станува полуширина на интервалот, а на <b>тестот</b> се мери колку често
+              вистинската вредност паѓа внатре. Тоа ѝ дава на одлуката праг на доверба, наместо гола бројка.
+            </p>
+          </div>
+
+          <div class="card r" style="--d:6">
+            <h3>4 · Одлука <span class="tag">analysis/sleep_sim.py</span></h3>
+            <p style="margin:0 0 .7rem;font-size:.85rem;color:var(--ink-2)">
+              Праг = <b>20-ти перцентил на тренинг-оптоварувањето</b> на таа станица (без истекување
+              од тестот). Ако прогнозата за следниот час е под прагот → секундарниот носител заспива.
+            </p>
+            <div class="figure" style="border:none;padding:0;background:none">
+              <svg viewBox="0 0 420 142" role="img" aria-label="Временска линија со праг за заспивање, точни заспивања и лажни заспивања">
+                <g id="sleep-fig"></g>
+              </svg>
+            </div>
+            <div class="chips" style="margin-top:.6rem">
+              <span class="chip good">sleep_share</span>
+              <span class="chip">oracle_share</span>
+              <span class="chip risk">false_sleep — QoS ризик</span>
+              <span class="chip">missed_sleep — пропуштена заштеда</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <p class="callout r" style="--d:8;margin-top:.9rem">
+        <b>Асиметрија што ја носи одлуката:</b> двата типа грешка не чинат исто. <b>Лажно заспивање</b>
+        (прогнозата вели „тивко“, реалноста не е) е ризик за корисничкото искуство; <b>пропуштено
+        заспивање</b> е само неостварена заштеда. Затоа <code>under_rate</code> и <code>peak_under_rate</code>
+        се мерат посебно — модел со добар просек, но кој системски потценува во врвовите, не е добар кандидат.
+        Во архитектурата на O-RAN, ваквата логика живее како <b>rApp</b> во Non-RT RIC и <b>xApp</b> во Near-RT RIC.
+      </p>
+    </section>
+
+  </main>
+
+  <footer class="transport">
+    <button id="prev" title="Претходна (←)" aria-label="Претходна сцена">‹</button>
+    <button id="play" title="Пушти / паузирај (Space)" aria-label="Пушти или паузирај">▶</button>
+    <button id="next" title="Следна (→)" aria-label="Следна сцена">›</button>
+    <span class="counter" id="counter">01 / 10</span>
+    <span class="now" id="now"></span>
+    <span class="progress"><i id="bar"></i></span>
+    <span class="speeds" role="group" aria-label="Брзина">
+      <button data-s="0.6" aria-pressed="false">0.6×</button>
+      <button data-s="1" aria-pressed="true">1×</button>
+      <button data-s="1.6" aria-pressed="false">1.6×</button>
+    </span>
+  </footer>
+</div>
+
+<script>
+"use strict";
+const NS = "http://www.w3.org/2000/svg";
+const el = (n, a = {}) => { const e = document.createElementNS(NS, n); for (const k in a) e.setAttribute(k, a[k]); return e; };
+const add = (p, n, a) => { const e = el(n, a); p.appendChild(e); return e; };
+const txt = (p, x, y, s, cls, extra = {}) => {
+  const t = add(p, "text", Object.assign({ x, y }, extra));
+  if (cls) t.setAttribute("class", cls);
+  t.textContent = s; return t;
+};
+
+/* Детерминистичка „сообраќајна“ серија со дневен циклус. */
+function series(n, seed = 7, base = 42, amp = 30) {
+  let s = seed, out = [];
+  const rnd = () => (s = (s * 1103515245 + 12345) & 0x7fffffff) / 0x7fffffff;
+  for (let i = 0; i < n; i++) {
+    const h = i % 24;
+    const day = Math.sin((h - 8) / 24 * Math.PI * 2) * 0.62 + Math.sin((h - 4) / 12 * Math.PI * 2) * 0.2;
+    const week = (Math.floor(i / 24) % 7 >= 5) ? -0.22 : 0;
+    out.push(Math.max(3, base + amp * (day + week) + (rnd() - 0.5) * amp * 0.32));
+  }
+  return out;
+}
+const pathFrom = (pts) => pts.map((p, i) => (i ? "L" : "M") + p[0].toFixed(1) + " " + p[1].toFixed(1)).join(" ");
+
+/* ── 0 · мапа на пајплајнот ───────────────────────────────── */
+(function mapFlow(){
+  const g = document.getElementById("map-flow");
+  const steps = [
+    ["CSV по станица", "192 часа · 3 канали", "var(--muted)"],
+    ["прозорец 24 h", "→ следниот час", "var(--muted)"],
+    ["4 модели", "секој од нула", "var(--accent)"],
+    ["метрики", "RSE · MASE · bias", "var(--muted)"],
+    ["одлука", "заспивање · ресурси", "var(--measured)"]
+  ];
+  const w = 150, gap = 33, y = 34, h = 54;
+  steps.forEach((s, i) => {
+    const x = 8 + i * (w + gap);
+    const bx = add(g, "g", { class: "r", style: "--d:" + (4 + i) });
+    add(bx, "rect", { x, y, width: w, height: h, rx: 3, fill: "var(--surface-2)", stroke: s[2], "stroke-width": i === 2 || i === 4 ? 1.6 : 1 });
+    txt(bx, x + w / 2, y + 22, s[0], "big", { "text-anchor": "middle", style: "fill:" + (i === 2 || i === 4 ? s[2] : "var(--ink)") });
+    txt(bx, x + w / 2, y + 38, s[1], null, { "text-anchor": "middle" });
+    if (i < steps.length - 1) {
+      const ax = x + w + 5, ay = y + h / 2;
+      const ar = add(g, "g", { class: "r", style: "--d:" + (5 + i) });
+      add(ar, "path", { d: `M${ax} ${ay} H${ax + gap - 12}`, stroke: "var(--line)", "stroke-width": 1.4, fill: "none" });
+      add(ar, "path", { d: `M${ax + gap - 16} ${ay - 4} l5 4 l-5 4`, stroke: "var(--line)", "stroke-width": 1.4, fill: "none" });
+    }
+  });
+  /* повратна јамка */
+  const loop = add(g, "g", { class: "r", style: "--d:10" });
+  add(loop, "path", {
+    d: "M786 88 V138 H83 V88", fill: "none", stroke: "var(--measured)",
+    "stroke-width": 1.2, "stroke-dasharray": "4 4"
+  });
+  add(loop, "path", { d: "M79 96 l4 -8 l4 8", fill: "none", stroke: "var(--measured)", "stroke-width": 1.2 });
+  txt(loop, 434, 152, "одлуката се враќа во мрежата — rApp (Non-RT RIC) / xApp (Near-RT RIC)", null,
+      { "text-anchor": "middle", style: "fill:var(--measured)" });
+  txt(g, 8, 22, "по секоја базна станица", "lbl");
+})();
+
+/* ── 1 · канали ───────────────────────────────────────────── */
+(function chanFlow(){
+  const g = document.getElementById("chan-flow");
+  const chans = [["packets / prb", "var(--muted)"], ["bytes", "var(--muted)"], ["users", "var(--measured)"]];
+  chans.forEach((c, i) => {
+    const y = 22 + i * 34;
+    const row = add(g, "g", { class: "r", style: "--d:" + (6 + i) });
+    add(row, "rect", { x: 10, y, width: 168, height: 24, rx: 2, fill: "var(--surface-2)", stroke: c[1] });
+    txt(row, 20, y + 16, c[0], "lbl", { style: "fill:" + c[1] });
+    const d = series(46, 3 + i * 11, 12, 8).map((v, k) => [200 + k * 5.4, y + 22 - v * 0.9]);
+    add(row, "path", { d: pathFrom(d), fill: "none", stroke: c[1], "stroke-width": 1.3, opacity: i === 2 ? 1 : .55 });
+  });
+  add(g, "path", { d: "M460 40 H520 M460 74 H520 M460 108 H520", stroke: "var(--line)", "stroke-width": 1, class: "r", style: "--d:9" });
+  const box = add(g, "g", { class: "r", style: "--d:10" });
+  add(box, "rect", { x: 522, y: 44, width: 132, height: 60, rx: 3, fill: "var(--surface-2)", stroke: "var(--accent)", "stroke-width": 1.5 });
+  txt(box, 588, 68, "модел", "big", { "text-anchor": "middle", style: "fill:var(--accent)" });
+  txt(box, 588, 84, "3 канали влез", null, { "text-anchor": "middle" });
+  add(g, "path", { d: "M656 74 H726", stroke: "var(--line)", "stroke-width": 1.4, class: "r", style: "--d:11" });
+  add(g, "path", { d: "M722 70 l5 4 l-5 4", stroke: "var(--line)", "stroke-width": 1.4, fill: "none", class: "r", style: "--d:11" });
+  const out = add(g, "g", { class: "r", style: "--d:12" });
+  add(out, "circle", { cx: 754, cy: 74, r: 7, fill: "var(--measured)" });
+  txt(out, 770, 70, "users", "big", { style: "fill:var(--measured)" });
+  txt(out, 770, 84, "следниот час", null);
+})();
+
+/* ── 2 · поделба + лизгачки прозорец ──────────────────────── */
+(function splitFig(){
+  const g = document.getElementById("split-fig");
+  const n = 120, x0 = 30, W = 840, bw = W / n;
+  const data = series(n, 11, 46, 26);
+  const max = Math.max(...data), base = 165;
+  /* петтиот член е висината на етикетата: тесниот валидациски дел се крева на
+     свој ред за да не се судри со етикетата на тест-делот */
+  const bands = [
+    [0,  .7, "тренирање · 70 %",  "var(--m1)",     30],
+    [.7, .8, "валидација · 10 %", "var(--m4)",     16],
+    [.8,  1, "тест · 20 %",       "var(--accent)", 30]
+  ];
+  bands.forEach((b, i) => {
+    const bx = x0 + b[0] * W, bwid = (b[1] - b[0]) * W;
+    const grp = add(g, "g", { class: "r", style: "--d:" + (4 + i) });
+    add(grp, "rect", { x: bx, y: 34, width: bwid, height: 136, fill: b[3], opacity: .08 });
+    add(grp, "rect", { x: bx, y: 34, width: bwid, height: 2, fill: b[3] });
+    txt(grp, bx + 6, b[4], b[2], "lbl", { style: "fill:" + b[3] });
+    if (b[4] < 24) add(grp, "line", { x1: bx + 1, y1: b[4] + 5, x2: bx + 1, y2: 33, stroke: b[3], "stroke-width": 1, opacity: .55 });
+  });
+  data.forEach((v, i) => {
+    add(g, "rect", {
+      x: x0 + i * bw, y: base - (v / max) * 118, width: Math.max(1.2, bw - .9),
+      height: (v / max) * 118, fill: "var(--ink-2)", opacity: .5,
+      class: "pop", style: "--d:" + (7 + i * .12)
+    });
+  });
+  add(g, "line", { x1: x0, y1: base, x2: x0 + W, y2: base, class: "axis" });
+
+  /* лизгачки прозорец */
+  const winW = 24 * bw;
+  const win = add(g, "g", { class: "anim-slide" });
+  add(win, "rect", { x: x0, y: 34, width: winW, height: 136, fill: "var(--accent)", opacity: .17, stroke: "var(--accent)", "stroke-width": 1.4, rx: 2 });
+  add(win, "rect", { x: x0 + winW, y: 34, width: bw * 1.1, height: 136, fill: "var(--measured)", opacity: .55 });
+  txt(win, x0 + winW / 2, 50, "24 h влез", "big", { "text-anchor": "middle", style: "fill:var(--accent)" });
+  txt(win, x0 + winW + 6, 168, "цел", null, { style: "fill:var(--measured)" });
+
+  txt(g, x0, 196, "seq_len = 24   →   pred_len = 1", "lbl");
+  txt(g, x0 + 300, 196, "Сет 1: ~110 / ~20 / ~38 прозорци", null);
+  txt(g, x0 + 560, 196, "Сет 2: seq_len = 12 → 21 / 6 / 9", null);
+  txt(g, x0, 216, "валидацијата и тестот почнуваат seq_len часа порано, за прв полн прозорец", null);
+
+  const st = document.createElement("style");
+  const travel = (0.7 * W) - winW;
+  st.textContent = `@keyframes slideWin{0%{transform:translateX(0)}88%{transform:translateX(${travel.toFixed(0)}px)}100%{transform:translateX(${travel.toFixed(0)}px)}}
+  .scene.is-active .anim-slide{animation:slideWin calc(7*var(--u)) cubic-bezier(.4,0,.6,1) calc(1.4*var(--u)) infinite}`;
+  document.head.appendChild(st);
+})();
+
+/* ── 3 · PatchTST ─────────────────────────────────────────── */
+(function patchFig(){
+  const g = document.getElementById("patch-fig");
+  const n = 24, x0 = 26, bw = 13, data = series(n, 5, 44, 26), max = Math.max(...data), base = 96;
+  txt(g, x0, 20, "прозорец: 24 часа", "lbl");
+  data.forEach((v, i) => {
+    add(g, "rect", { x: x0 + i * bw, y: base - (v / max) * 62, width: bw - 2, height: (v / max) * 62,
+      fill: "var(--m1)", opacity: .45, class: "pop", style: "--d:" + (4 + i * .25) });
+  });
+  add(g, "line", { x1: x0, y1: base, x2: x0 + n * bw, y2: base, class: "axis" });
+
+  /* лизгачка заграда од 6 часа */
+  const br = add(g, "g", { class: "anim-patchwin" });
+  add(br, "rect", { x: x0, y: 28, width: bw * 6, height: 70, rx: 2, fill: "var(--m1)", opacity: .2, stroke: "var(--m1)", "stroke-width": 1.4 });
+  /* етикетата на заградата оди ПОД оската — горе е зафатено од насловот на фигурата */
+  txt(br, x0 + bw * 3, 112, "patch_len 6", null, { "text-anchor": "middle", style: "fill:var(--m1)" });
+
+  /* токени */
+  txt(g, 380, 20, "20 закрпи → токени", "lbl");
+  for (let i = 0; i < 20; i++) {
+    add(g, "rect", { x: 380 + (i % 10) * 21, y: 32 + Math.floor(i / 10) * 24, width: 18, height: 19, rx: 2,
+      fill: "var(--m1)", opacity: .3, stroke: "var(--m1)", class: "pop", style: "--d:" + (9 + i * .5) });
+  }
+  txt(g, 380, 100, "секој → линеарна проекција → d_model 32 + позиција", null);
+
+  /* канална независност */
+  const ci = add(g, "g", { class: "r", style: "--d:16" });
+  [0, 1, 2].forEach(i => {
+    add(ci, "rect", { x: 26 + i * 8, y: 128 + i * 7, width: 300, height: 54, rx: 3,
+      fill: "var(--surface-2)", stroke: "var(--m1)", opacity: i === 2 ? 1 : .45 });
+  });
+  txt(ci, 60, 168, "енкодер × 3 слоја · 4 глави · d_ff 256", "big", { style: "fill:var(--m1)" });
+  txt(ci, 60, 184, "секој канал независно, исти тежини", null);
+  txt(g, 26, 210, "канална независност: 3-те канали одат во batch-димензијата, без мешање", null, { class: "r", style: "--d:18" });
+
+  /* глава + излез */
+  const hd = add(g, "g", { class: "r", style: "--d:19" });
+  add(hd, "path", { d: "M420 158 H500", stroke: "var(--line)", "stroke-width": 1.4 });
+  add(hd, "rect", { x: 504, y: 138, width: 96, height: 40, rx: 3, fill: "var(--surface-2)", stroke: "var(--m1)" });
+  txt(hd, 552, 156, "Flatten глава", "big", { "text-anchor": "middle", style: "fill:var(--m1)" });
+  txt(hd, 552, 170, "→ 1 чекор", null, { "text-anchor": "middle" });
+  add(hd, "path", { d: "M604 158 H660", stroke: "var(--line)", "stroke-width": 1.4 });
+  add(hd, "circle", { cx: 676, cy: 158, r: 7, fill: "var(--measured)" });
+  txt(hd, 692, 154, "следниот час", "big", { style: "fill:var(--measured)" });
+  txt(hd, 692, 168, "де-нормализирано (RevIN)", null);
+
+  const st = document.createElement("style");
+  st.textContent = `@keyframes patchWin{0%{transform:translateX(0)}90%{transform:translateX(${(bw*18)}px)}100%{transform:translateX(${(bw*18)}px)}}
+  .scene.is-active .anim-patchwin{animation:patchWin calc(5*var(--u)) steps(19) calc(1.2*var(--u)) infinite}`;
+  document.head.appendChild(st);
+})();
+
+/* ── 4 · CATS ─────────────────────────────────────────────── */
+(function catsFig(){
+  const g = document.getElementById("cats-fig");
+  /* научен прашалник (горе) */
+  const q = add(g, "g", { class: "r", style: "--d:4" });
+  txt(q, 450, 20, "иднината е научен параметар, не податок", "lbl", { "text-anchor": "middle", style: "fill:var(--m2)" });
+  add(q, "rect", { x: 396, y: 30, width: 108, height: 40, rx: 3, fill: "var(--m2)", opacity: .3, stroke: "var(--m2)", "stroke-width": 1.8 });
+  txt(q, 450, 48, "dummy закрпа", "big", { "text-anchor": "middle", style: "fill:var(--m2)" });
+  txt(q, 450, 62, "nn.Parameter · Q", null, { "text-anchor": "middle" });
+
+  /* излез — десно од прашалникот, над зраците */
+  const o = add(g, "g", { class: "r", style: "--d:5" });
+  add(o, "path", { d: "M510 50 H600", stroke: "var(--line)", "stroke-width": 1.4 });
+  add(o, "rect", { x: 604, y: 32, width: 108, height: 36, rx: 3, fill: "var(--surface-2)", stroke: "var(--m2)" });
+  txt(o, 658, 49, "проекција → 6", "big", { "text-anchor": "middle", style: "fill:var(--m2)" });
+  txt(o, 658, 62, "се зема 1-виот чекор", null, { "text-anchor": "middle" });
+  add(o, "path", { d: "M716 50 H768", stroke: "var(--line)", "stroke-width": 1.4 });
+  add(o, "circle", { cx: 784, cy: 50, r: 7, fill: "var(--measured)" });
+  txt(o, 800, 54, "час +1", "big", { style: "fill:var(--measured)" });
+
+  /* минати закрпи K,V — етикетата оди ПОД редот, зраците остануваат чисти */
+  const px = [];
+  for (let i = 0; i < 20; i++) {
+    const x = 26 + i * 27, y = 182;
+    px.push([x + 10, y]);
+    add(g, "rect", { x, y, width: 21, height: 22, rx: 2, fill: "var(--m2)", opacity: .22,
+      stroke: "var(--m2)", class: "pop", style: "--d:" + (6 + i * .4) });
+  }
+  txt(g, 26, 220, "20 минати закрпи  →  клучеви и вредности (K, V)", "lbl");
+
+  /* зраци на вкрстено внимание */
+  px.forEach((p, i) => {
+    const d = `M450 72 Q ${(450 + p[0]) / 2} ${(72 + p[1]) / 2 + 20} ${p[0]} ${p[1] - 2}`;
+    const path = add(g, "path", { d, fill: "none", stroke: "var(--m2)", "stroke-width": 1, opacity: .5,
+      class: "draw", style: "--len:200;--d:" + (10 + i * .35) });
+    path.setAttribute("stroke-dasharray", "200");
+  });
+
+  /* прекрстено self-attention — десно од редот со закрпи */
+  const xs = add(g, "g", { class: "r", style: "--d:18" });
+  add(xs, "path", { d: "M600 212 c 26 -24, 62 -24, 88 0", fill: "none", stroke: "var(--muted)", "stroke-width": 1.2, "stroke-dasharray": "3 3" });
+  add(xs, "path", { d: "M628 186 l32 24 M660 186 l-32 24", stroke: "var(--risk)", "stroke-width": 1.8 });
+  txt(xs, 700, 204, "нема self-attention", null, { style: "fill:var(--risk)" });
+
+  /* објаснување — во сопствен ред под фигурата */
+  txt(g, 26, 248, "вкрстено внимание × 3 слоја", "big", { class: "r", style: "--d:20", fill: "var(--m2)" });
+  txt(g, 26, 264, "во секој слој се ажурира само прашалникот; скоровите се пренесуваат резидуално", null, { class: "r", style: "--d:21" });
+  txt(g, 26, 278, "QAM маскирање 0.1 → 0.3 активно само при тренирање", null, { class: "r", style: "--d:22" });
+})();
+
+/* ── 5 · DeformableTST ────────────────────────────────────── */
+(function deformFig(){
+  const g = document.getElementById("deform-fig");
+  const n = 24, x0 = 40, sp = 33, yRef = 172, ySamp = 128;
+  txt(g, x0, 206, "референтна решетка (рамномерни позиции во прозорецот од 24 часа)", "lbl");
+  txt(g, x0, 114, "научени позиции за земање примерок", "lbl", { style: "fill:var(--m3)" });
+
+  const offs = [0, 14, -9, 22, -18, 6, 31, -25, 11, -6, 18, -14, 26, 4, -21, 9, 16, -11, 28, -3, 12, -17, 7, 20];
+  for (let i = 0; i < n; i++) {
+    const xr = x0 + i * sp;
+    add(g, "circle", { cx: xr, cy: yRef, r: 3, fill: "none", stroke: "var(--muted)", "stroke-width": 1.2,
+      class: "pop", style: "--d:" + (5 + i * .2) });
+    const xs = xr + offs[i] * 0.62;
+    const grp = add(g, "g", { class: "anim-off", style: "--d:" + (8 + i * .25) });
+    add(grp, "path", { d: `M${xr} ${yRef - 5} C ${xr} ${yRef - 30}, ${xs} ${ySamp + 30}, ${xs} ${ySamp + 6}`,
+      fill: "none", stroke: "var(--m3)", "stroke-width": 1, opacity: .55 });
+    add(grp, "circle", { cx: xs, cy: ySamp, r: 4.2, fill: "var(--m3)", opacity: .85 });
+  }
+  add(g, "line", { x1: x0 - 8, y1: yRef, x2: x0 + n * sp, y2: yRef, class: "axis" });
+
+  const box = add(g, "g", { class: "r", style: "--d:16" });
+  add(box, "rect", { x: 40, y: 44, width: 210, height: 46, rx: 3, fill: "var(--surface-2)", stroke: "var(--m3)" });
+  txt(box, 52, 62, "conv_offset (k=3)", "big", { style: "fill:var(--m3)" });
+  txt(box, 52, 78, "предвидува поместување по прашалник", null);
+
+  const box2 = add(g, "g", { class: "r", style: "--d:17" });
+  add(box2, "rect", { x: 268, y: 44, width: 200, height: 46, rx: 3, fill: "var(--surface-2)", stroke: "var(--m3)" });
+  txt(box2, 280, 62, "F.grid_sample", "big", { style: "fill:var(--m3)" });
+  txt(box2, 280, 78, "K, V на континуирани позиции", null);
+
+  const box3 = add(g, "g", { class: "r", style: "--d:18" });
+  add(box3, "rect", { x: 486, y: 44, width: 190, height: 46, rx: 3, fill: "var(--surface-2)", stroke: "var(--m3)" });
+  txt(box3, 498, 62, "3 × D-блок", "big", { style: "fill:var(--m3)" });
+  txt(box3, 498, 78, "LPU → деформ. внимание → DWC-MLP", null);
+
+  const out = add(g, "g", { class: "r", style: "--d:19" });
+  add(out, "path", { d: "M684 67 H730", stroke: "var(--line)", "stroke-width": 1.4 });
+  add(out, "circle", { cx: 748, cy: 67, r: 7, fill: "var(--measured)" });
+  txt(out, 764, 63, "час +1", "big", { style: "fill:var(--measured)" });
+  txt(out, 764, 77, "Flatten + LayerNorm", null);
+
+  txt(g, x0, 222, "без закрпи и без намалување на резолуцијата (stem_ratio = 1) — секој чекор останува чекор", null, { class: "r", style: "--d:20" });
+
+  const st = document.createElement("style");
+  st.textContent = `@keyframes offShift{0%,100%{transform:translateX(0)}50%{transform:translateX(9px)}}
+  .scene.is-active .anim-off{animation:offShift calc(3.4*var(--u)) ease-in-out infinite;animation-delay:calc(var(--d,0)*.09*var(--u))}
+  .anim-off{opacity:0}
+  .scene.is-active .anim-off{opacity:1;transition:opacity .3s}`;
+  document.head.appendChild(st);
+})();
+
+/* ── 6 · Peri-midFormer ───────────────────────────────────── */
+(function perimidFig(){
+  const g = document.getElementById("perimid-fig");
+  const n = 72, x0 = 26, W = 250;
+  const data = series(n, 21, 46, 26);
+  const trend = data.map((_, i) => {
+    let s = 0, c = 0;
+    for (let k = Math.max(0, i - 12); k < Math.min(n, i + 13); k++) { s += data[k]; c++; }
+    return s / c;
+  });
+  const max = Math.max(...data);
+  const P = (arr, yTop, hh) => arr.map((v, i) => [x0 + i * (W / n), yTop + hh - (v / max) * hh]);
+
+  txt(g, x0, 20, "1 · декомпозиција", "lbl");
+  add(g, "path", { d: pathFrom(P(data, 28, 44)), fill: "none", stroke: "var(--ink-2)", "stroke-width": 1.2,
+    class: "draw", style: "--len:700;--d:4", "stroke-dasharray": "700" });
+  txt(g, x0 + W + 6, 52, "серија", null);
+  add(g, "path", { d: pathFrom(P(trend, 92, 30)), fill: "none", stroke: "var(--m4)", "stroke-width": 1.6,
+    class: "draw", style: "--len:700;--d:6", "stroke-dasharray": "700" });
+  txt(g, x0 + W + 6, 108, "тренд → линеарен слој", null, { style: "fill:var(--m4)" });
+  const seas = data.map((v, i) => v - trend[i] + max * .5);
+  add(g, "path", { d: pathFrom(P(seas, 146, 34)), fill: "none", stroke: "var(--accent)", "stroke-width": 1.2,
+    class: "draw", style: "--len:700;--d:8", "stroke-dasharray": "700" });
+  txt(g, x0 + W + 6, 168, "сезонски → пирамида", null, { style: "fill:var(--accent)" });
+
+  /* FFT спектар */
+  const fx = 400, amps = [3, 7, 62, 14, 9, 41, 6, 11, 5, 8, 4, 7, 3, 6, 4, 3];
+  txt(g, fx, 20, "2 · rfft → top_k = 2 амплитуди", "lbl");
+  amps.forEach((a, i) => {
+    const top = a >= 41;
+    add(g, "rect", { x: fx + i * 13, y: 92 - a, width: 9, height: a,
+      fill: top ? "var(--m4)" : "var(--muted)", opacity: top ? 1 : .4,
+      class: "pop", style: "--d:" + (10 + i * .5) });
+  });
+  add(g, "line", { x1: fx, y1: 92, x2: fx + 16 * 13, y2: 92, class: "axis" });
+  txt(g, fx, 106, "фреквенција →", null);
+  /* заградата ги обележува двата највисоки столба; објаснувањето оди под оската,
+     бидејќи горниот ред е зафатен од насловот на фигурата */
+  const tg = add(g, "g", { class: "r", style: "--d:16" });
+  add(tg, "path", { d: `M${fx + 26} 28 V22 H${fx + 74} V28`, fill: "none", stroke: "var(--m4)", "stroke-width": 1 });
+  txt(tg, fx + 120, 106, "период = L // индекс", null, { style: "fill:var(--m4)" });
+
+  /* пирамида */
+  const px = 400, py = 124;
+  txt(g, px, 138, "3 · периодична пирамида", "lbl");
+  const tiers = [[1, 132], [2, 64], [4, 30]];
+  tiers.forEach((t, r) => {
+    for (let i = 0; i < t[0]; i++) {
+      add(g, "rect", { x: px + 60 + i * (t[1] + 5) - (t[0] * (t[1] + 5)) / 2 + 6, y: 148 + r * 26,
+        width: t[1], height: 20, rx: 2, fill: "var(--m4)", opacity: .25 + r * .12, stroke: "var(--m4)",
+        class: "pop", style: "--d:" + (18 + r * 1.6 + i * .5) });
+    }
+  });
+  txt(g, px + 150, 162, "ниво 1 — најдолг период", null);
+  txt(g, px + 150, 188, "ниво 2", null);
+  txt(g, px + 150, 214, "ниво 3 — најкратки компоненти", null);
+  const at = add(g, "g", { class: "r", style: "--d:24" });
+  add(at, "path", { d: `M${px + 40} 158 C ${px - 4} 178, ${px - 4} 196, ${px + 40} 212`, fill: "none",
+    stroke: "var(--accent)", "stroke-width": 1.2, "stroke-dasharray": "3 3" });
+  txt(at, px, 238, "внимание во и меѓу нивоата на пирамидата", null, { style: "fill:var(--accent)" });
+})();
+
+/* ── 7 · тренирање ────────────────────────────────────────── */
+(function trainFig(){
+  const g = document.getElementById("train-fig");
+  const x0 = 46, W = 560, y0 = 30, H = 150, E = 60, best = 34;
+  add(g, "line", { x1: x0, y1: y0 + H, x2: x0 + W, y2: y0 + H, class: "axis" });
+  add(g, "line", { x1: x0, y1: y0, x2: x0, y2: y0 + H, class: "axis" });
+  txt(g, x0 + W / 2, y0 + H + 26, "епохи →", null, { "text-anchor": "middle" });
+  txt(g, 12, y0 + 10, "загуба", null);
+
+  const tr = [], va = [];
+  for (let i = 0; i < E; i++) {
+    const t = 1 / (1 + i * 0.14) + 0.06;
+    tr.push([x0 + i * (W / E), y0 + H - t * H * .82]);
+    const u = 1 / (1 + i * 0.16) + 0.13 + Math.max(0, (i - best)) * 0.0085;
+    va.push([x0 + i * (W / E), y0 + H - u * H * .82]);
+  }
+  add(g, "path", { d: pathFrom(tr), fill: "none", stroke: "var(--m1)", "stroke-width": 1.8,
+    class: "draw", style: "--len:900;--d:5", "stroke-dasharray": "900" });
+  add(g, "path", { d: pathFrom(va), fill: "none", stroke: "var(--accent)", "stroke-width": 1.8,
+    "stroke-dasharray": "5 4", class: "r", style: "--d:8" });
+  /* легендата стои горе-лево во графиконот: таму кривите се веќе спуштени,
+     а десниот раб е зафатен од панелот со чекорите */
+  const lg = add(g, "g", { class: "r", style: "--d:10" });
+  add(lg, "line", { x1: 56, y1: 42, x2: 78, y2: 42, stroke: "var(--m1)", "stroke-width": 1.8 });
+  txt(lg, 82, 46, "тренинг", "big", { style: "fill:var(--m1)" });
+  add(lg, "line", { x1: 146, y1: 42, x2: 168, y2: 42, stroke: "var(--accent)", "stroke-width": 1.8, "stroke-dasharray": "5 4" });
+  txt(lg, 172, 46, "валидација", "big", { style: "fill:var(--accent)" });
+
+  const bx = va[best][0], by = va[best][1];
+  const mk = add(g, "g", { class: "r", style: "--d:13" });
+  add(mk, "line", { x1: bx, y1: y0, x2: bx, y2: y0 + H, stroke: "var(--measured)", "stroke-width": 1.3, "stroke-dasharray": "3 3" });
+  add(mk, "circle", { cx: bx, cy: by, r: 5.5, fill: "var(--measured)" });
+  add(mk, "rect", { x: bx - 74, y: y0 - 22, width: 152, height: 20, rx: 2, fill: "var(--measured)", opacity: .16, stroke: "var(--measured)" });
+  txt(mk, bx, y0 - 8, "checkpoint.pth се зачувува тука", "big", { "text-anchor": "middle", style: "fill:var(--measured)" });
+  txt(mk, bx + 10, y0 + H - 8, "најдобра валидациска епоха", null, { style: "fill:var(--measured)" });
+
+  const sp = add(g, "g", { class: "r", style: "--d:16" });
+  add(sp, "rect", { x: 664, y: 30, width: 220, height: 150, rx: 3, fill: "var(--surface-2)", stroke: "var(--line)" });
+  const items = [
+    ["1", "прозорци од train-делот"],
+    ["2", "MSE на последниот чекор"],
+    ["3", "backward → Adam чекор"],
+    ["4", "валидациска загуба"],
+    ["5", "подобра? → зачувај"],
+    ["6", "50 епохи без подобрување → стоп"]
+  ];
+  items.forEach((it, i) => {
+    txt(sp, 678, 52 + i * 22, it[0], "big", { style: "fill:var(--accent)" });
+    txt(sp, 694, 52 + i * 22, it[1], null);
+  });
+  txt(sp, 678, 40, "по епоха", "lbl");
+})();
+
+/* ── 8 · предикција ───────────────────────────────────────── */
+(function predFig(){
+  const g = document.getElementById("pred-fig");
+  const n = 38, x0 = 30, W = 470, base = 150, H = 100;
+  const data = series(n, 33, 46, 24), max = Math.max(...data);
+  const pts = data.map((v, i) => [x0 + i * (W / n), base - (v / max) * H]);
+  add(g, "rect", { x: x0 - 6, y: 34, width: W + 12, height: 124, fill: "var(--accent)", opacity: .07, class: "r", style: "--d:4" });
+  txt(g, x0, 28, "тест-делот — последните 20 % часови", "lbl", { style: "fill:var(--accent)" });
+  add(g, "path", { d: pathFrom(pts), fill: "none", stroke: "var(--measured)", "stroke-width": 1.7,
+    class: "draw", style: "--len:800;--d:5", "stroke-dasharray": "800" });
+  pts.forEach((p, i) => {
+    const jit = ((i * 37) % 11 - 5) * 1.1;
+    add(g, "circle", { cx: p[0], cy: p[1] + jit, r: 2.6, fill: "var(--accent)",
+      class: "pop", style: "--d:" + (9 + i * .38) });
+  });
+  add(g, "line", { x1: x0, y1: base, x2: x0 + W, y2: base, class: "axis" });
+  txt(g, x0, 176, "вистинско", "big", { style: "fill:var(--measured)" });
+  txt(g, x0 + 76, 176, "предвидено", "big", { style: "fill:var(--accent)" });
+  txt(g, x0, 192, "→ pred.npy · true.npy · metrics.npy · metrics_ext.json", null);
+
+  /* десно: прогноза по крајот на датотеката */
+  const rx = 545, sp = 8;
+  add(g, "line", { x1: rx - 16, y1: 34, x2: rx - 16, y2: 168, stroke: "var(--line)", "stroke-width": 1, "stroke-dasharray": "3 3", class: "r", style: "--d:14" });
+  txt(g, rx, 28, "оперативна прогноза", "lbl", { style: "fill:var(--measured)" });
+  const last = series(24, 9, 46, 24), lmax = Math.max(...last);
+  const lpts = last.map((v, i) => [rx + i * sp, base - (v / lmax) * H]);
+  add(g, "path", { d: pathFrom(lpts), fill: "none", stroke: "var(--ink-2)", "stroke-width": 1.5,
+    class: "draw", style: "--len:400;--d:15", "stroke-dasharray": "400" });
+  add(g, "rect", { x: rx, y: 40, width: 24 * sp, height: 118, fill: "var(--ink-2)", opacity: .07, class: "r", style: "--d:15" });
+  txt(g, rx + 12 * sp, 176, "последните 24 реда од CSV", null, { "text-anchor": "middle" });
+  const fx = rx + 24 * sp + 18;
+  add(g, "line", { x1: fx - 12, y1: 40, x2: fx - 12, y2: 158, stroke: "var(--measured)", "stroke-width": 1.2, class: "r", style: "--d:19" });
+  txt(g, fx - 12, 36, "крај на датотеката", null, { "text-anchor": "middle", style: "fill:var(--measured)" });
+  const fo = add(g, "g", { class: "r", style: "--d:21" });
+  add(fo, "path", { d: `M${lpts[23][0]} ${lpts[23][1]} L${fx + 20} ${lpts[23][1] - 14}`, stroke: "var(--measured)", "stroke-width": 1.5, "stroke-dasharray": "4 3", fill: "none" });
+  add(fo, "circle", { cx: fx + 20, cy: lpts[23][1] - 14, r: 7, fill: "var(--measured)" });
+  txt(fo, fx + 34, lpts[23][1] - 18, "час +1", "big", { style: "fill:var(--measured)" });
+  txt(fo, fx + 34, lpts[23][1] - 4, "real_prediction.npy", null);
+})();
+
+/* ── 9 · рангирање + заспивање ────────────────────────────── */
+(function decisionFigs(){
+  const g = document.getElementById("rank-fig");
+  const models = [["PatchTST", .58, "var(--m1)"], ["CATS", .66, "var(--m2)"], ["DeformableTST", .74, "var(--m3)"], ["Peri-midFormer", .81, "var(--m4)"]];
+  const x0 = 132, W = 420;
+  models.forEach((m, i) => {
+    const y = 18 + i * 24;
+    txt(g, x0 - 8, y + 11, m[0], "lbl", { "text-anchor": "end", style: "fill:" + m[2] });
+    add(g, "rect", { x: x0, y, width: W, height: 14, rx: 2, fill: "var(--surface-2)" });
+    const b = add(g, "rect", { x: x0, y, width: 0, height: 14, rx: 2, fill: m[2], opacity: .8 });
+    b.setAttribute("class", "anim-bar");
+    b.setAttribute("style", "--w:" + (m[1] * W).toFixed(0) + "px;--d:" + (6 + i * 1.2));
+  });
+  add(g, "line", { x1: x0 + W * .82, y1: 12, x2: x0 + W * .82, y2: 114, stroke: "var(--risk)", "stroke-width": 1.2, "stroke-dasharray": "3 3" });
+  txt(g, x0 + W * .82 + 6, 112, "RSE = 1", null, { style: "fill:var(--risk)" });
+  txt(g, x0, 116, "просечен RSE преку станиците — пониско е подобро (шематски)", null);
+
+  const s = document.getElementById("sleep-fig");
+  const n = 34, sx = 12, sw = 11, sbase = 84;
+  const load = series(n, 44, 40, 26), lmax = Math.max(...load);
+  const thr = 30;
+  load.forEach((v, i) => {
+    const under = v < thr, h = (v / lmax) * 58;
+    const wrong = under && (i % 9 === 4);
+    add(s, "rect", { x: sx + i * sw, y: sbase - h, width: sw - 2, height: h,
+      fill: wrong ? "var(--risk)" : (under ? "var(--good)" : "var(--ink-2)"),
+      opacity: under ? .85 : .35, class: "pop", style: "--d:" + (8 + i * .4) });
+  });
+  const ty = sbase - (thr / lmax) * 58;
+  add(s, "line", { x1: sx, y1: ty, x2: sx + n * sw, y2: ty, stroke: "var(--measured)", "stroke-width": 1.4, "stroke-dasharray": "4 3", class: "r", style: "--d:14" });
+  txt(s, sx, ty - 5, "праг = 20-ти перцентил на тренинг-оптоварувањето", null, { class: "r", style: "--d:14", fill: "var(--measured)" });
+  add(s, "line", { x1: sx, y1: sbase, x2: sx + n * sw, y2: sbase, class: "axis" });
+  txt(s, sx, sbase + 16, "заспива", "big", { style: "fill:var(--good)" });
+  txt(s, sx + 58, sbase + 16, "лажно заспивање", "big", { style: "fill:var(--risk)" });
+  txt(s, sx, sbase + 30, "буден", null);
+  txt(s, sx, sbase + 44, "тест часови →", null);
+
+  const st = document.createElement("style");
+  st.textContent = `.anim-bar{width:0}
+  @keyframes growBar{to{width:var(--w)}}
+  .scene.is-active .anim-bar{animation:growBar calc(1.1*var(--u)) cubic-bezier(.2,.8,.2,1) both;animation-delay:calc(var(--d,0)*.16*var(--u))}
+  @media (prefers-reduced-motion: reduce){.scene.is-active .anim-bar{animation-duration:1ms}}`;
+  document.head.appendChild(st);
+})();
+
+/* ── Плеер ────────────────────────────────────────────────── */
+const scenes = [...document.querySelectorAll(".scene")];
+const rail = document.getElementById("rail");
+const bar = document.getElementById("bar");
+const counter = document.getElementById("counter");
+const nowEl = document.getElementById("now");
+const playBtn = document.getElementById("play");
+
+let idx = -1, playing = false, speed = 1, t0 = 0, raf = 0;
+
+scenes.forEach((s, i) => {
+  const b = document.createElement("button");
+  b.textContent = String(i).padStart(2, "0") + " " + s.dataset.title;
+  b.addEventListener("click", () => { go(i); pause(); });
+  rail.appendChild(b);
+});
+const railBtns = [...rail.children];
+
+function go(i){
+  i = (i + scenes.length) % scenes.length;
+  if (idx === i) return;
+  if (idx >= 0) scenes[idx].classList.remove("is-active");
+  idx = i;
+  const s = scenes[idx];
+  void s.offsetWidth;                    /* reflow → анимациите почнуваат од почеток */
+  s.classList.add("is-active");
+  s.scrollTop = 0;
+  railBtns.forEach((b, k) => b.setAttribute("aria-current", k === idx ? "true" : "false"));
+  counter.textContent = String(idx + 1).padStart(2, "0") + " / " + String(scenes.length).padStart(2, "0");
+  nowEl.textContent = s.dataset.title;
+  t0 = performance.now();
+  bar.style.width = "0%";
+}
+function dur(){ return (+scenes[idx].dataset.dur || 16) * 1000 / speed; }
+function tick(now){
+  if (!playing) return;
+  const p = Math.min(1, (now - t0) / dur());
+  bar.style.width = (p * 100).toFixed(2) + "%";
+  if (p >= 1){ const nx = idx + 1; if (nx >= scenes.length){ go(0); } else { go(nx); } }
+  raf = requestAnimationFrame(tick);
+}
+function play(){ playing = true; playBtn.textContent = "❙❙"; t0 = performance.now(); cancelAnimationFrame(raf); raf = requestAnimationFrame(tick); }
+function pause(){ playing = false; playBtn.textContent = "▶"; cancelAnimationFrame(raf); }
+function toggle(){ playing ? pause() : play(); }
+
+playBtn.addEventListener("click", toggle);
+document.getElementById("prev").addEventListener("click", () => { go(idx - 1); if (playing) t0 = performance.now(); });
+document.getElementById("next").addEventListener("click", () => { go(idx + 1); if (playing) t0 = performance.now(); });
+document.querySelectorAll(".speeds button").forEach(b => {
+  b.addEventListener("click", () => {
+    speed = parseFloat(b.dataset.s);
+    document.documentElement.style.setProperty("--u", (1 / speed) + "s");
+    document.querySelectorAll(".speeds button").forEach(o => o.setAttribute("aria-pressed", String(o === b)));
+    t0 = performance.now();
+  });
+});
+addEventListener("keydown", e => {
+  if (e.target instanceof Element && e.target.matches("button") && e.key === " ") return;
+  if (e.key === " "){ e.preventDefault(); toggle(); }
+  else if (e.key === "ArrowRight"){ go(idx + 1); if (playing) t0 = performance.now(); }
+  else if (e.key === "ArrowLeft"){ go(idx - 1); if (playing) t0 = performance.now(); }
+  else if (e.key === "Home"){ go(0); }
+});
+
+go(0);
+play();
+</script>
